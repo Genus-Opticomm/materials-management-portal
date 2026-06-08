@@ -522,17 +522,25 @@ async function atFetchAll(tableId, params = {}) {
   let records = [], offset = null;
   do {
     const url = new URL(`${AT_API}/${AT_BASE}/${tableId}`);
-    // Build query string manually so fields[] are repeated correctly
     const parts = [];
+
+    // Add view if provided
+    if (params.view) {
+      parts.push(`view=${encodeURIComponent(params.view)}`);
+    }
+
     Object.entries(params).forEach(([k, v]) => {
+      if (k === 'view') return; // already handled
       if (Array.isArray(v)) {
         v.forEach(item => parts.push(`fields%5B%5D=${encodeURIComponent(item)}`));
       } else {
         parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
       }
     });
+
     if (offset) parts.push(`offset=${encodeURIComponent(offset)}`);
     const fullUrl = url.toString() + (parts.length ? '?' + parts.join('&') : '');
+
     const res = await fetch(fullUrl, { headers: { Authorization: `Bearer ${AT_TOKEN}` } });
     if (!res.ok) throw new Error(`AT ${res.status}: ${await res.text()}`);
     const d = await res.json();
@@ -572,10 +580,24 @@ async function atSearchByFormula(tableId, formula) {
 async function initData() {
   try {
     const [wh, sc, reps, mats] = await Promise.all([
-      atFetchAll(TBL.warehouses, { filterByFormula: '{Active}=TRUE()', fields: ['State','Location','State + Location','Warehouse Manager Name'] }),
-      atFetchAll(TBL.subcontractors, { filterByFormula: '{Active}=TRUE()', fields: ['Company Name','Representatives'] }),
-      atFetchAll(TBL.representatives, { filterByFormula: '{Active}=TRUE()', fields: ['Full Name','Company','Company Name (from Company)','Email','Mobile'] }),
-      atFetchAll(TBL.materialsQuantities),
+      atFetchAll(TBL.warehouses, { 
+        filterByFormula: '{Active}=TRUE()', 
+        fields: ['State','Location','State + Location','Warehouse Manager Name'],
+        view: 'Grid view'           // ← Add this
+      }),
+      atFetchAll(TBL.subcontractors, { 
+        filterByFormula: '{Active}=TRUE()', 
+        fields: ['Company Name','Representatives'],
+        view: 'Grid view'           // ← Add this
+      }),
+      atFetchAll(TBL.representatives, { 
+        filterByFormula: '{Active}=TRUE()', 
+        fields: ['Full Name','Company','Company Name (from Company)','Email','Mobile'],
+        view: 'Grid view'           // ← Add this
+      }),
+      atFetchAll(TBL.materialsQuantities, { 
+        view: 'Grid view'           // ← Add this (most important)
+      }),
     ]);
     CACHE.warehouses      = wh;
     CACHE.subcontractors  = sc;
