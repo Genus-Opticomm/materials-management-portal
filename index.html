@@ -1132,13 +1132,12 @@ let wfFoundRecId = null;
 
         // Create the main request record
         const newRequest = await atCreate(TBL.materialsRequest, {
-          [FLD.mr_company]:     [compRecId],           // Company Name field (links to Rep)
-          [FLD.mr_rep]:         [repRecId],           // Company Representative Name
-          // Do NOT write to Email / Mobile directly - they are also links or will be handled by lookups
+          [FLD.mr_rep]:         [repRecId],           // This is correct (links to Representatives)
           [FLD.mr_whState]:     [locRecId],
           [FLD.mr_whLoc]:       [locRecId],
           [FLD.mr_dateReq]:     document.getElementById('wf-dateReq').value,
           [FLD.mr_lineCount]:   reqItems.length,
+          [FLD.mr_company]:     [compRecId],
         });
 
         const mainRequestId = newRequest.id;
