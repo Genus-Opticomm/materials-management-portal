@@ -1188,9 +1188,13 @@ let wfFoundRecId = null;
 
 async function loadRequestLineItems(requestId, stockFieldName) {
   try {
+    console.log('Loading line items for request:', requestId); // Debug
+
     const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
       `{Request}="${requestId}"`
     );
+
+    console.log('Found line items:', lineItems.length);
 
     lineItems.forEach(line => {
       const materialId = line.fields['Material'] ? line.fields['Material'][0] : null;
@@ -1199,18 +1203,27 @@ async function loadRequestLineItems(requestId, stockFieldName) {
       const qtyRequested = parseInt(line.fields['Qty Requested']) || 0;
       const qtyReceived  = parseInt(line.fields['Qty Received']) || 0;
 
-      // Find inputs
-      const reqInput = document.querySelector(`.wf-req[data-record="${materialId}"]`);
-      const rcvInput = document.querySelector(`.wf-rcv[data-record="${materialId}"]`);
+      // Find the inputs — give extra time for DOM to settle
+      setTimeout(() => {
+        const reqInput = document.querySelector(`.wf-req[data-record="${materialId}"]`);
+        const rcvInput = document.querySelector(`.wf-rcv[data-record="${materialId}"]`);
 
-      if (reqInput) {
-        reqInput.value = qtyRequested;
-        reqInput.disabled = true;                    // Lock requested quantity
-        reqInput.classList.add('qty-locked');
-      }
-      if (rcvInput) {
-        rcvInput.value = qtyReceived;
-      }
+        if (reqInput) {
+          reqInput.value = qtyRequested;
+          reqInput.disabled = true;
+          reqInput.classList.add('qty-locked');
+          console.log(`Set requested qty for ${materialId}: ${qtyRequested}`);
+        } else {
+          console.warn(`Could not find .wf-req for material ${materialId}`);
+        }
+
+        if (rcvInput) {
+          rcvInput.value = qtyReceived;
+          rcvInput.disabled = false;           // Make sure it's editable
+          rcvInput.classList.remove('qty-locked');
+          console.log(`Set received qty for ${materialId}: ${qtyReceived}`);
+        }
+      }, 150);
     });
   } catch (err) {
     console.error('Failed to load line items:', err);
@@ -1281,22 +1294,24 @@ async function wfSearch() {
       document.getElementById('wf-state').value = state;
       buildLocationDropdown(document.getElementById('wf-location'), state);
 
-      setTimeout(() => {
-        if (locIds[0]) {
-          document.getElementById('wf-location').value = locIds[0];
-          const locOpt = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
-          const locName = locOpt?.dataset?.location || '';
-          
-          if (state && locName) {
-            const sfName = getStockFieldName(state, locName);
-            buildMaterialsTable('wf-subsections', 'wf', sfName);
-            document.getElementById('wf-notice').style.display = 'none';
+    setTimeout(() => {
+      if (locIds[0]) {
+        document.getElementById('wf-location').value = locIds[0];
+        const locOpt = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
+        const locName = locOpt?.dataset?.location || '';
+    
+      if (state && locName) {
+        const sfName = getStockFieldName(state, locName);
+        buildMaterialsTable('wf-subsections', 'wf', sfName);
+        document.getElementById('wf-notice').style.display = 'none';
 
-            // Load and pre-fill line items
-            loadRequestLineItems(wfFoundRecId, sfName);
-          }
-        }
-      }, 120);
+      // Increased delay to ensure table is fully rendered
+      setTimeout(() => {
+        loadRequestLineItems(wfFoundRecId, sfName);
+      }, 300);
+    }
+  }
+}, 150);
     }
 
     if (f['Date Required']) {
