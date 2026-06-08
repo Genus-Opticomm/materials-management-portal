@@ -441,14 +441,15 @@ const AT_BASE  = 'appLWbPBLepjoO6F4';
 const AT_API   = 'https://api.airtable.com/v0';
 
 const TBL = {
-  warehouses:          'tblbzPycQ8I7pZzl5',
-  subcontractors:      'tblrvtTKRWDm0Agwc',
-  representatives:     'tblutA51et1wwkEVA',
-  materialsQuantities: 'tbldLNJHOmXy6MdRa',
-  inventory:           'tblZmIuHI6Uc38r45',
-  materialsRequest:    'tbl7WEVWq0DlwLhnt',
-  materialsUsed:       'tblgfw9MvYDAtZEHz',
-  bog:                 'tblSl6LaXIAphgQeC',
+  warehouses:            'tblbzPycQ8I7pZzl5',
+  subcontractors:        'tblrvtTKRWDm0Agwc',
+  representatives:       'tblutA51et1wwkEVA',
+  materialsQuantities:   'tbldLNJHOmXy6MdRa',
+  inventory:             'tblZmIuHI6Uc38r45',
+  materialsRequest:      'tbl7WEVWq0DlwLhnt',
+  materialsRequestLines: 'tblWQyFIO1QTnmNbB',
+  materialsUsed:         'tblgfw9MvYDAtZEHz',
+  bog:                   'tblSl6LaXIAphgQeC',
 };
 
 // Field IDs for key write fields
@@ -1071,36 +1072,66 @@ let wfFoundRecId = null;
       const sfName    = getStockFieldName(stateName, locName);
 
       if (wfMode === 'receive' && wfFoundRecId) {
-        // Confirm receipt — reduce stock by Qty Received
+        // === CONFIRM RECEIPT ===
         const rcvItems = [];
         document.querySelectorAll('.wf-rcv').forEach(inp => {
           const qty = parseInt(inp.value) || 0;
           if (qty > 0) {
-            const matRec = CACHE.materials.find(r => r.id === inp.dataset.record);
-            const curr = parseFloat(matRec?.fields?.[sfName] || 0);
-            rcvItems.push({ recId: inp.dataset.record, qty, curr, field: sfName });
+            rcvItems.push({ 
+              recId: inp.dataset.record,   // Material record ID
+              qtyReceived: qty 
+            });
           }
         });
 
-        await atUpdate(TBL.materialsRequest, wfFoundRecId, {
-          [FLD.mr_dateColl]: document.getElementById('wf-dateColl').value || null,
-        });
+        // Update Line Items with Qty Received
+        for (const item of rcvItems) {
+          // Find the corresponding line item for this material + request
+          const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
+            `AND({Request}="${wfFoundRecId}", {Material}="${item.recId}")`
+          );
+
+          if (lineItems.length > 0) {
+            await atUpdate(TBL.materialsRequestLines, lineItems[0].id, {
+              ['Qty Received']: item.qtyReceived
+            });
+          }
+        }
+
+        // Deduct received quantities from warehouse stock
+        const locOpt = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
+        const locName = locOpt?.dataset?.location || '';
+        const stateName = document.getElementById('wf-state').value;
+        const stockField = getStockFieldName(stateName, locName);
 
         for (const item of rcvItems) {
-          await atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: Math.max(0, item.curr - item.qty) });
-          const cached = CACHE.materials.find(r => r.id === item.recId);
-          if (cached) cached.fields[item.field] = Math.max(0, item.curr - item.qty);
+          const matRec = CACHE.materials.find(r => r.id === item.recId);
+          if (!matRec) continue;
+
+          const currentStock = parseFloat(matRec.fields[stockField]) || 0;
+          const newStock = Math.max(0, currentStock - item.qtyReceived);
+
+          await atUpdate(TBL.materialsQuantities, item.recId, {
+            [stockField]: newStock
+          });
+
+          // Update cache
+          matRec.fields[stockField] = newStock;
         }
+
         showSuccess('wf-success', `✔ Receipt confirmed for ${wfFoundRecId}. ${rcvItems.length} item(s) deducted from stock.`);
       } else {
-        // New request
+        // === NEW MATERIALS REQUEST ===
         const reqItems = [];
         document.querySelectorAll('.wf-req').forEach(inp => {
           const qty = parseInt(inp.value) || 0;
-          if (qty > 0) reqItems.push({ recId: inp.dataset.record, qty });
+          if (qty > 0) {
+            reqItems.push({ recId: inp.dataset.record, qty });
+          }
         });
 
-        await atCreate(TBL.materialsRequest, {
+        // Create the main Materials Request record
+        const newRequest = await atCreate(TBL.materialsRequest, {
           [FLD.mr_company]:   [compRecId],
           [FLD.mr_rep]:       [repRecId],
           [FLD.mr_email]:     [repRecId],
@@ -1110,7 +1141,19 @@ let wfFoundRecId = null;
           [FLD.mr_dateReq]:   document.getElementById('wf-dateReq').value,
           [FLD.mr_lineCount]: reqItems.length,
         });
-        showSuccess('wf-success', `✔ Materials request submitted for ${document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex].text}.`);
+
+        const mainRequestId = newRequest.id;
+
+        // Create Line Items
+        for (const item of reqItems) {
+          await atCreate(TBL.materialsRequestLines, {
+            [ 'Request' ]:       [mainRequestId],
+            [ 'Material' ]:      [item.recId],
+            [ 'Qty Requested' ]: item.qty
+          });
+        }
+
+        showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items).`);
       }
 
       // Reset
@@ -1188,6 +1231,40 @@ async function wfSearch() {
           }
         }
       }, 80);
+
+    // ... existing code to populate company, rep, state, location ...
+
+    if (state && locName) {
+      const sfName = getStockFieldName(state, locName);
+      
+      // Build table first
+      buildMaterialsTable('wf-subsections', 'wf', sfName);
+      document.getElementById('wf-notice').style.display = 'none';
+
+      // Load existing line items and pre-fill
+      setTimeout(async () => {
+        const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
+          `{Request}="${wfFoundRecId}"`
+        );
+
+        lineItems.forEach(line => {
+          const materialId = line.fields['Material'] ? line.fields['Material'][0] : null;
+          if (!materialId) return;
+
+          const qtyReq = parseInt(line.fields['Qty Requested']) || 0;
+          const qtyRcv = parseInt(line.fields['Qty Received']) || 0;
+
+          // Find the input fields for this material
+          const reqInput = document.querySelector(`.wf-req[data-record="${materialId}"]`);
+          const rcvInput = document.querySelector(`.wf-rcv[data-record="${materialId}"]`);
+
+          if (reqInput) reqInput.value = qtyReq;
+          if (rcvInput) rcvInput.value = qtyRcv;
+        });
+
+        setQtyMode('receive');
+      }, 100);
+    }  
     }
 
     if (f['Date Required']) document.getElementById('wf-dateReq').value = f['Date Required'];
