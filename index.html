@@ -494,7 +494,7 @@ const FLD = {
   // Materials Request write fields
   mr_company:   'fldsy6zyY5qkRFQCB',
   mr_rep:       'fldRCbhCLC844i4x0',
-  mr_email:     'fldOXpJ7Gbs90RoTK',
+  mr_email:     'fldOXpJ7Gbs90RoTK',     // You can keep for now but we won't use it in create
   mr_mobile:    'fldYHJCqVYzmLIw0f',
   mr_whState:   'fldPaakLa8ZPTKhte',
   mr_whLoc:     'fldvx4uTTtGvY61jt',
@@ -1120,7 +1120,7 @@ let wfFoundRecId = null;
         }
 
         showSuccess('wf-success', `✔ Receipt confirmed for ${wfFoundRecId}. ${rcvItems.length} item(s) deducted from stock.`);
-      } else {
+        } else {
         // === NEW MATERIALS REQUEST ===
         const reqItems = [];
         document.querySelectorAll('.wf-req').forEach(inp => {
@@ -1130,16 +1130,15 @@ let wfFoundRecId = null;
           }
         });
 
-        // Create the main Materials Request record
+        // Create the main request record
         const newRequest = await atCreate(TBL.materialsRequest, {
-          [FLD.mr_company]:   [compRecId],
-          [FLD.mr_rep]:       [repRecId],
-          [FLD.mr_email]:     [repRecId],
-          [FLD.mr_mobile]:    [repRecId],
-          [FLD.mr_whState]:   [locRecId],
-          [FLD.mr_whLoc]:     [locRecId],
-          [FLD.mr_dateReq]:   document.getElementById('wf-dateReq').value,
-          [FLD.mr_lineCount]: reqItems.length,
+          [FLD.mr_company]:     [compRecId],           // Company Name field (links to Rep)
+          [FLD.mr_rep]:         [repRecId],           // Company Representative Name
+          // Do NOT write to Email / Mobile directly - they are also links or will be handled by lookups
+          [FLD.mr_whState]:     [locRecId],
+          [FLD.mr_whLoc]:       [locRecId],
+          [FLD.mr_dateReq]:     document.getElementById('wf-dateReq').value,
+          [FLD.mr_lineCount]:   reqItems.length,
         });
 
         const mainRequestId = newRequest.id;
@@ -1147,9 +1146,9 @@ let wfFoundRecId = null;
         // Create Line Items
         for (const item of reqItems) {
           await atCreate(TBL.materialsRequestLines, {
-            [ 'Request' ]:       [mainRequestId],
-            [ 'Material' ]:      [item.recId],
-            [ 'Qty Requested' ]: item.qty
+            'Request':       [mainRequestId],
+            'Material':      [item.recId],
+            'Qty Requested': item.qty
           });
         }
 
@@ -1174,37 +1173,75 @@ let wfFoundRecId = null;
   });
 })();
 
+async function loadRequestLineItems(requestId, stockFieldName) {
+  try {
+    const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
+      `{Request}="${requestId}"`
+    );
+
+    lineItems.forEach(line => {
+      const materialId = line.fields['Material'] ? line.fields['Material'][0] : null;
+      if (!materialId) return;
+
+      const qtyRequested = parseInt(line.fields['Qty Requested']) || 0;
+      const qtyReceived  = parseInt(line.fields['Qty Received']) || 0;
+
+      // Pre-fill inputs
+      const reqInput = document.querySelector(`.wf-req[data-record="${materialId}"]`);
+      const rcvInput = document.querySelector(`.wf-rcv[data-record="${materialId}"]`);
+
+      if (reqInput) reqInput.value = qtyRequested;
+      if (rcvInput) rcvInput.value = qtyReceived;
+    });
+  } catch (err) {
+    console.error('Failed to load line items:', err);
+  }
+}
+
 async function wfSearch() {
   const idVal  = document.getElementById('wf-reqId').value.trim().toUpperCase();
   const banner = document.getElementById('wf-searchStatus');
-  if (!idVal) { showBanner(banner, 'error', 'Please enter a Request ID.'); return; }
-  if (!/^REQ-\d{5}$/.test(idVal)) { showBanner(banner, 'error', 'Format must be REQ-XXXXX (e.g. REQ-00123).'); return; }
+  if (!idVal) { 
+    showBanner(banner, 'error', 'Please enter a Request ID.'); 
+    return; 
+  }
+  if (!/^REQ-\d{5}$/.test(idVal)) { 
+    showBanner(banner, 'error', 'Format must be REQ-XXXXX (e.g. REQ-00123).'); 
+    return; 
+  }
 
   showBanner(banner, 'found', '🔍 Searching…');
   try {
     const recs = await atSearchByFormula(TBL.materialsRequest, `{Request ID}="${idVal}"`);
     if (!recs.length) {
       showBanner(banner, 'not-found', `"${idVal}" not found — form ready for a new request.`);
-      wfMode = 'new'; wfFoundRecId = null;
+      wfMode = 'new'; 
+      wfFoundRecId = null;
       document.getElementById('wf-submitBtn').textContent = 'Submit Request';
-      wfUnlockFields(); setQtyMode('request'); return;
+      wfUnlockFields(); 
+      setQtyMode('request'); 
+      return;
     }
-    const rec = recs[0]; wfFoundRecId = rec.id; wfMode = 'receive';
+
+    const rec = recs[0]; 
+    wfFoundRecId = rec.id; 
+    wfMode = 'receive';
     const f = rec.fields;
 
-    // Populate fields from linked lookups
+    // Populate Company, Rep, Warehouse, etc.
+    const compIds  = f['Company Name'] || [];
     const repIds   = f['Company Representative Name'] || [];
-    const compIds  = f['Company Name']  || [];
-    const stateIds = f['Warehouse State']   || [];
-    const locIds   = f['Warehouse Location']|| [];
+    const stateIds = f['Warehouse State'] || [];
+    const locIds   = f['Warehouse Location'] || [];
 
-    // Set company
+    // Set Company
     if (compIds[0]) {
       document.getElementById('wf-company').value = compIds[0];
       buildRepDropdown(document.getElementById('wf-rep'), compIds[0],
         document.getElementById('wf-email'), document.getElementById('wf-mobile'));
     }
-    // Set rep — need small delay for DOM
+
+    // Set Representative
     setTimeout(() => {
       if (repIds[0]) {
         document.getElementById('wf-rep').value = repIds[0];
@@ -1214,68 +1251,44 @@ async function wfSearch() {
       }
     }, 50);
 
-    // Set warehouse state/location
+    // Set Warehouse State + Location
     if (stateIds[0]) {
       const whRec = CACHE.warehouseByRecId[stateIds[0]];
       const state = whRec?.fields?.['State'] || '';
       document.getElementById('wf-state').value = state;
       buildLocationDropdown(document.getElementById('wf-location'), state);
+
       setTimeout(() => {
         if (locIds[0]) {
           document.getElementById('wf-location').value = locIds[0];
-          const locOpt = document.getElementById('wf-location').options;
-          const locName = Array.from(locOpt).find(o => o.value === locIds[0])?.dataset?.location || '';
+          const locOpt = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
+          const locName = locOpt?.dataset?.location || '';
+          
           if (state && locName) {
-            buildMaterialsTable('wf-subsections', 'wf', getStockFieldName(state, locName));
+            const sfName = getStockFieldName(state, locName);
+            buildMaterialsTable('wf-subsections', 'wf', sfName);
             document.getElementById('wf-notice').style.display = 'none';
+
+            // === LOAD LINE ITEMS AND PRE-FILL QUANTITIES ===
+            loadRequestLineItems(wfFoundRecId, sfName);
           }
         }
-      }, 80);
-
-    // ... existing code to populate company, rep, state, location ...
-
-    if (state && locName) {
-      const sfName = getStockFieldName(state, locName);
-      
-      // Build table first
-      buildMaterialsTable('wf-subsections', 'wf', sfName);
-      document.getElementById('wf-notice').style.display = 'none';
-
-      // Load existing line items and pre-fill
-      setTimeout(async () => {
-        const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
-          `{Request}="${wfFoundRecId}"`
-        );
-
-        lineItems.forEach(line => {
-          const materialId = line.fields['Material'] ? line.fields['Material'][0] : null;
-          if (!materialId) return;
-
-          const qtyReq = parseInt(line.fields['Qty Requested']) || 0;
-          const qtyRcv = parseInt(line.fields['Qty Received']) || 0;
-
-          // Find the input fields for this material
-          const reqInput = document.querySelector(`.wf-req[data-record="${materialId}"]`);
-          const rcvInput = document.querySelector(`.wf-rcv[data-record="${materialId}"]`);
-
-          if (reqInput) reqInput.value = qtyReq;
-          if (rcvInput) rcvInput.value = qtyRcv;
-        });
-
-        setQtyMode('receive');
       }, 100);
-    }  
     }
 
-    if (f['Date Required']) document.getElementById('wf-dateReq').value = f['Date Required'];
+    if (f['Date Required']) {
+      document.getElementById('wf-dateReq').value = f['Date Required'];
+    }
 
     wfLockFields();
     setQtyMode('receive');
     document.getElementById('wfgrp-dateColl').style.display = '';
     document.getElementById('wf-submitBtn').textContent = 'Submit Receipt Confirmation';
-    showBanner(banner, 'found', `✔ ${idVal} found — fields locked. Enter quantities received below.`);
+    showBanner(banner, 'found', `✔ ${idVal} found — enter quantities received below.`);
+
   } catch(err) {
-    showBanner(banner, 'error', 'Search failed: ' + err.message); console.error(err);
+    showBanner(banner, 'error', 'Search failed: ' + err.message);
+    console.error(err);
   }
 }
 
