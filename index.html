@@ -522,9 +522,18 @@ async function atFetchAll(tableId, params = {}) {
   let records = [], offset = null;
   do {
     const url = new URL(`${AT_API}/${AT_BASE}/${tableId}`);
-    Object.entries(params).forEach(([k,v]) => url.searchParams.append(k, v));
-    if (offset) url.searchParams.append('offset', offset);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${AT_TOKEN}` } });
+    // Build query string manually so fields[] are repeated correctly
+    const parts = [];
+    Object.entries(params).forEach(([k, v]) => {
+      if (Array.isArray(v)) {
+        v.forEach(item => parts.push(`fields%5B%5D=${encodeURIComponent(item)}`));
+      } else {
+        parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+      }
+    });
+    if (offset) parts.push(`offset=${encodeURIComponent(offset)}`);
+    const fullUrl = url.toString() + (parts.length ? '?' + parts.join('&') : '');
+    const res = await fetch(fullUrl, { headers: { Authorization: `Bearer ${AT_TOKEN}` } });
     if (!res.ok) throw new Error(`AT ${res.status}: ${await res.text()}`);
     const d = await res.json();
     records = records.concat(d.records || []);
@@ -563,9 +572,9 @@ async function atSearchByFormula(tableId, formula) {
 async function initData() {
   try {
     const [wh, sc, reps, mats] = await Promise.all([
-      atFetchAll(TBL.warehouses, { filterByFormula: '{Active}=1', fields: ['State','Location','State + Location','Warehouse Manager Name'] }),
-      atFetchAll(TBL.subcontractors, { filterByFormula: '{Active}=1', fields: ['Company Name','Representatives'] }),
-      atFetchAll(TBL.representatives, { filterByFormula: '{Active}=1', fields: ['Full Name','Company','Company Name (from Company)','Email','Mobile'] }),
+      atFetchAll(TBL.warehouses, { filterByFormula: '{Active}=TRUE()', fields: ['State','Location','State + Location','Warehouse Manager Name'] }),
+      atFetchAll(TBL.subcontractors, { filterByFormula: '{Active}=TRUE()', fields: ['Company Name','Representatives'] }),
+      atFetchAll(TBL.representatives, { filterByFormula: '{Active}=TRUE()', fields: ['Full Name','Company','Company Name (from Company)','Email','Mobile'] }),
       atFetchAll(TBL.materialsQuantities),
     ]);
     CACHE.warehouses      = wh;
@@ -1374,7 +1383,8 @@ document.getElementById('formBog').addEventListener('submit', async function(e) 
       'JHA Signed':              document.getElementById('bog-jha').checked,
       'ACM Disturbance':         document.getElementById('bog-acm').value || null,
       'Gas Monitoring':          document.getElementById('bog-gas').checked,
-      'Telstra Guards':          document.getElementById('bog-excavation').checked,
+      'Telstra Guards':          document.getElementById('bog-gas').checked,
+      'Excavation Work':         document.getElementById('bog-excavation').checked,
       'Additional Comments':     document.getElementById('bog-comments').value,
     };
     if (!isMob) {
