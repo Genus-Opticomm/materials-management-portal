@@ -1076,51 +1076,42 @@ let wfFoundRecId = null;
         const rcvItems = [];
         document.querySelectorAll('.wf-rcv').forEach(inp => {
           const qty = parseInt(inp.value) || 0;
-          if (qty > 0) {
-            rcvItems.push({ 
-              recId: inp.dataset.record,   // Material record ID
-              qtyReceived: qty 
-            });
-          }
+          if (qty > 0) rcvItems.push({ recId: inp.dataset.record, qtyReceived: qty });
         });
 
-        // Update Line Items with Qty Received
-        for (const item of rcvItems) {
-          // Find the corresponding line item for this material + request
-          const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
-            `AND({Request}="${wfFoundRecId}", {Material}="${item.recId}")`
-          );
-
-          if (lineItems.length > 0) {
-            await atUpdate(TBL.materialsRequestLines, lineItems[0].id, {
-              ['Qty Received']: item.qtyReceived
-            });
-          }
-        }
-
-        // Deduct received quantities from warehouse stock
         const locOpt = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
         const locName = locOpt?.dataset?.location || '';
         const stateName = document.getElementById('wf-state').value;
         const stockField = getStockFieldName(stateName, locName);
 
         for (const item of rcvItems) {
+          // Update Qty Received in line item
+          const lineSearch = await atSearchByFormula(TBL.materialsRequestLines, 
+            `AND({Request}="${wfFoundRecId}", {Material}="${item.recId}")`
+          );
+
+          if (lineSearch.length > 0) {
+            await atUpdate(TBL.materialsRequestLines, lineSearch[0].id, {
+              'Qty Received': item.qtyReceived
+            });
+          }
+
+          // Stock adjustment: Return (Requested - Received) to available stock
           const matRec = CACHE.materials.find(r => r.id === item.recId);
           if (!matRec) continue;
 
+          const qtyReq = parseInt(lineSearch[0]?.fields?.['Qty Requested']) || item.qtyReceived;
+          const adjustment = qtyReq - item.qtyReceived;   // Amount to return to stock
+
           const currentStock = parseFloat(matRec.fields[stockField]) || 0;
-          const newStock = Math.max(0, currentStock - item.qtyReceived);
+          const newStock = Math.max(0, currentStock + adjustment);
 
-          await atUpdate(TBL.materialsQuantities, item.recId, {
-            [stockField]: newStock
-          });
-
-          // Update cache
+          await atUpdate(TBL.materialsQuantities, item.recId, { [stockField]: newStock });
           matRec.fields[stockField] = newStock;
         }
 
-        showSuccess('wf-success', `✔ Receipt confirmed for ${wfFoundRecId}. ${rcvItems.length} item(s) deducted from stock.`);
-        } else {
+        showSuccess('wf-success', `✔ Receipt confirmed for ${wfFoundRecId}. Stock adjusted.`);
+      } else {
         // === NEW MATERIALS REQUEST ===
         const reqItems = [];
         document.querySelectorAll('.wf-req').forEach(inp => {
@@ -1132,12 +1123,14 @@ let wfFoundRecId = null;
 
         // Create the main request record
         const newRequest = await atCreate(TBL.materialsRequest, {
-          [FLD.mr_rep]:         [repRecId],           // This is correct (links to Representatives)
+          [FLD.mr_company]:     [compRecId],     // Company Name field
+          [FLD.mr_rep]:         [repRecId],      // Representative
+          [FLD.mr_email]:       [repRecId],      // ← Add this
+          [FLD.mr_mobile]:      [repRecId],      // ← Add this
           [FLD.mr_whState]:     [locRecId],
           [FLD.mr_whLoc]:       [locRecId],
           [FLD.mr_dateReq]:     document.getElementById('wf-dateReq').value,
           [FLD.mr_lineCount]:   reqItems.length,
-          [FLD.mr_company]:     [compRecId],
         });
 
         const mainRequestId = newRequest.id;
@@ -1149,6 +1142,27 @@ let wfFoundRecId = null;
             'Material':      [item.recId],
             'Qty Requested': item.qty
           });
+        }
+
+        // === RESERVE STOCK (reduce available qty) ===
+        const locOpt = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
+        const locName = locOpt?.dataset?.location || '';
+        const stateName = document.getElementById('wf-state').value;
+        const stockField = getStockFieldName(stateName, locName);
+
+        for (const item of reqItems) {
+          const matRec = CACHE.materials.find(r => r.id === item.recId);
+          if (!matRec) continue;
+
+          const currentStock = parseFloat(matRec.fields[stockField]) || 0;
+          const newStock = Math.max(0, currentStock - item.qty);
+
+          await atUpdate(TBL.materialsQuantities, item.recId, {
+            [stockField]: newStock
+          });
+
+          // Update local cache
+          matRec.fields[stockField] = newStock;
         }
 
         showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items).`);
@@ -1185,12 +1199,18 @@ async function loadRequestLineItems(requestId, stockFieldName) {
       const qtyRequested = parseInt(line.fields['Qty Requested']) || 0;
       const qtyReceived  = parseInt(line.fields['Qty Received']) || 0;
 
-      // Pre-fill inputs
+      // Find inputs
       const reqInput = document.querySelector(`.wf-req[data-record="${materialId}"]`);
       const rcvInput = document.querySelector(`.wf-rcv[data-record="${materialId}"]`);
 
-      if (reqInput) reqInput.value = qtyRequested;
-      if (rcvInput) rcvInput.value = qtyReceived;
+      if (reqInput) {
+        reqInput.value = qtyRequested;
+        reqInput.disabled = true;                    // Lock requested quantity
+        reqInput.classList.add('qty-locked');
+      }
+      if (rcvInput) {
+        rcvInput.value = qtyReceived;
+      }
     });
   } catch (err) {
     console.error('Failed to load line items:', err);
@@ -1200,6 +1220,7 @@ async function loadRequestLineItems(requestId, stockFieldName) {
 async function wfSearch() {
   const idVal  = document.getElementById('wf-reqId').value.trim().toUpperCase();
   const banner = document.getElementById('wf-searchStatus');
+  
   if (!idVal) { 
     showBanner(banner, 'error', 'Please enter a Request ID.'); 
     return; 
@@ -1212,6 +1233,7 @@ async function wfSearch() {
   showBanner(banner, 'found', '🔍 Searching…');
   try {
     const recs = await atSearchByFormula(TBL.materialsRequest, `{Request ID}="${idVal}"`);
+    
     if (!recs.length) {
       showBanner(banner, 'not-found', `"${idVal}" not found — form ready for a new request.`);
       wfMode = 'new'; 
@@ -1227,7 +1249,7 @@ async function wfSearch() {
     wfMode = 'receive';
     const f = rec.fields;
 
-    // Populate Company, Rep, Warehouse, etc.
+    // Populate header fields
     const compIds  = f['Company Name'] || [];
     const repIds   = f['Company Representative Name'] || [];
     const stateIds = f['Warehouse State'] || [];
@@ -1245,12 +1267,14 @@ async function wfSearch() {
       if (repIds[0]) {
         document.getElementById('wf-rep').value = repIds[0];
         const repRec = CACHE.repByRecId[repIds[0]];
-        document.getElementById('wf-email').value  = repRec?.fields?.['Email']  || '';
-        document.getElementById('wf-mobile').value = repRec?.fields?.['Mobile'] || '';
+        if (repRec) {
+          document.getElementById('wf-email').value  = repRec.fields?.['Email']  || '';
+          document.getElementById('wf-mobile').value = repRec.fields?.['Mobile'] || '';
+        }
       }
     }, 50);
 
-    // Set Warehouse State + Location
+    // Set Warehouse + Load Materials Table
     if (stateIds[0]) {
       const whRec = CACHE.warehouseByRecId[stateIds[0]];
       const state = whRec?.fields?.['State'] || '';
@@ -1268,11 +1292,11 @@ async function wfSearch() {
             buildMaterialsTable('wf-subsections', 'wf', sfName);
             document.getElementById('wf-notice').style.display = 'none';
 
-            // === LOAD LINE ITEMS AND PRE-FILL QUANTITIES ===
+            // Load and pre-fill line items
             loadRequestLineItems(wfFoundRecId, sfName);
           }
         }
-      }, 100);
+      }, 120);
     }
 
     if (f['Date Required']) {
@@ -1283,7 +1307,7 @@ async function wfSearch() {
     setQtyMode('receive');
     document.getElementById('wfgrp-dateColl').style.display = '';
     document.getElementById('wf-submitBtn').textContent = 'Submit Receipt Confirmation';
-    showBanner(banner, 'found', `✔ ${idVal} found — enter quantities received below.`);
+    showBanner(banner, 'found', `✔ ${idVal} found — review requested quantities and enter received amounts.`);
 
   } catch(err) {
     showBanner(banner, 'error', 'Search failed: ' + err.message);
