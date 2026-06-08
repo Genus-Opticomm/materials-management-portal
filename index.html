@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Materials Management Portal</title>
+  <link href="https://fonts.googleapis.com/css2?family=Exo:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary-dark: #112b4e;
+      --primary-mid: #8895a6;
+      --primary-accent: #ec7723;
+      --dark-80: rgba(17,43,78,0.8);
+      --dark-60: rgba(17,43,78,0.6);
+      --dark-40: rgba(17,43,78,0.4);
+      --dark-20: rgba(17,43,78,0.2);
+      --dark-10: rgba(17,43,78,0.1);
+      --dark-05: rgba(17,43,78,0.05);
+      --accent-60: rgba(236,119,35,0.6);
+      --accent-20: rgba(236,119,35,0.2);
+      --accent-10: rgba(236,119,35,0.1);
+      --accent-05: rgba(236,119,35,0.05);
+      --success: #28a745;
+      --danger: #dc3545;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Exo', sans-serif; background: #f9f9f9; color: var(--primary-dark); overflow-x: hidden; }
+    header { background: var(--primary-dark); height: 350px; display: flex; align-items: center; justify-content: center; padding: 0 2rem; }
+    .header-logo { height: 300px; width: auto; object-fit: contain; max-width: 800px; }
+    @media(max-width:768px){ header{height:220px} .header-logo{height:180px} }
+    .container { max-width: 1100px; margin: -50px auto 60px; padding: 2rem; background: white; border-radius: 1rem; box-shadow: 0 0 20px var(--dark-10); }
+    /* NAV */
+    .form-switcher { margin-bottom: 2rem; }
+    .form-switcher h2 { font-weight:600; font-size:1.1rem; margin-bottom:.75rem; }
+    .nav-buttons { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .nav-btn { background:var(--accent-60); border:none; color:white; font-family:'Exo',sans-serif; font-weight:600; font-size:.9rem; padding:.75rem 1.5rem; border-radius:.5rem; cursor:pointer; transition:background .3s; }
+    .nav-btn:hover, .nav-btn.active { background:var(--primary-accent); }
+    /* PANELS */
+    .form-panel { display:none; }
+    .form-panel.active { display:block; animation:fadeIn .2s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+    .panel-title { font-size:1.5rem; font-weight:600; margin-bottom:.25rem; }
+    .panel-subtitle { font-size:.85rem; color:var(--primary-mid); margin-bottom:1.75rem; }
+    .form-wrapper { border:1px solid var(--dark-20); padding:1.5rem; border-radius:1rem; overflow-x:auto; }
+    /* FIELDS */
+    .field-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:1.25rem; margin-bottom:1.5rem; }
+    .field-group { display:flex; flex-direction:column; }
+    .field-group.full { grid-column:1/-1; }
+    label { display:block; margin-bottom:.4rem; font-weight:600; font-size:.9rem; }
+    label .req { color:var(--primary-accent); margin-left:2px; }
+    input[type="text"], input[type="date"], input[type="number"], select, textarea {
+      width:100%; padding:.75rem; border:1px solid var(--dark-20); border-radius:.5rem;
+      font-size:1rem; font-family:'Exo',sans-serif; color:var(--primary-dark); background:white;
+      transition:border-color .2s; appearance:none; -webkit-appearance:none;
+    }
+    input:focus, select:focus, textarea:focus { outline:none; border-color:var(--primary-accent); box-shadow:0 0 0 3px var(--accent-10); }
+    input:read-only, input:disabled, select:disabled { background:#f4f4f4; color:var(--primary-mid); cursor:not-allowed; }
+    select {
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ec7723' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 14px center; padding-right:36px; cursor:pointer;
+    }
+    select:disabled { opacity:.55; cursor:not-allowed; }
+    /* DIVIDER */
+    .section-divider { display:flex; align-items:center; margin:1.75rem 0; gap:.75rem; }
+    .section-divider .divider-line { flex:1; height:1px; background:var(--accent-60); }
+    .section-divider .divider-label { font-weight:600; font-size:.95rem; color:var(--primary-accent); white-space:nowrap; }
+    /* ACCORDION */
+    .subsections { display:flex; flex-direction:column; gap:.6rem; margin-bottom:1.75rem; }
+    .subsection { border:1px solid var(--dark-20); border-radius:.6rem; overflow:hidden; transition:border-color .2s; }
+    .subsection.open { border-color:var(--accent-60); }
+    .subsection-header { display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem; cursor:pointer; user-select:none; background:var(--dark-05); transition:background .15s; }
+    .subsection-header:hover { background:var(--accent-05); }
+    .subsection.open .subsection-header { background:var(--accent-10); }
+    .subsection-title { font-weight:600; font-size:.95rem; display:flex; align-items:center; gap:.6rem; }
+    .subsection.open .subsection-title { color:var(--primary-accent); }
+    .subsection-badge { font-size:.75rem; font-weight:400; padding:2px 8px; border-radius:99px; background:var(--dark-10); color:var(--primary-mid); }
+    .subsection.open .subsection-badge { background:var(--accent-20); color:var(--primary-accent); }
+    .chevron { width:18px; height:18px; color:var(--primary-mid); transition:transform .2s,color .2s; flex-shrink:0; }
+    .subsection.open .chevron { transform:rotate(180deg); color:var(--primary-accent); }
+    .subsection-body { display:none; }
+    .subsection.open .subsection-body { display:block; }
+    /* TABLE */
+    .mat-table { width:100%; border-collapse:collapse; font-size:.88rem; }
+    .mat-table thead tr { background:var(--dark-05); }
+    .mat-table th { font-weight:600; font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; color:var(--primary-mid); padding:.6rem .75rem; text-align:left; border-bottom:1px solid var(--dark-20); white-space:nowrap; }
+    .mat-table td { padding:.5rem .75rem; border-bottom:1px solid var(--dark-10); vertical-align:middle; }
+    .mat-table tr:last-child td { border-bottom:none; }
+    .mat-table tr:hover td { background:var(--accent-05); }
+    .code-cell { font-family:'Courier New',monospace; font-size:.8rem; color:var(--primary-accent); white-space:nowrap; font-weight:600; }
+    .desc-cell { color:var(--primary-mid); font-size:.85rem; }
+    .stock-cell { text-align:center; font-weight:600; }
+    .qty-input { width:80px !important; padding:.4rem .5rem !important; font-size:.9rem !important; text-align:center; border-radius:.4rem !important; }
+    .qty-locked { background:#f4f4f4 !important; color:var(--primary-mid) !important; }
+    .qty-over { border-color:var(--danger) !important; background:#fff5f5 !important; }
+    .inline-warn { color:var(--danger); font-size:.78rem; margin-top:.2rem; display:none; }
+    /* LOADING */
+    .table-loading { padding:1.5rem; text-align:center; color:var(--primary-mid); font-style:italic; font-size:.9rem; }
+    .table-empty { padding:1rem; text-align:center; color:var(--primary-mid); font-size:.85rem; }
+    .notice-box { display:none; padding:.75rem 1rem; background:var(--accent-05); border:1px solid var(--accent-20); border-radius:.5rem; margin-bottom:1rem; font-size:.88rem; color:var(--primary-mid); }
+    /* SEARCH */
+    .search-row { display:flex; gap:.75rem; align-items:flex-start; }
+    .search-input-wrap { flex:1; }
+    .search-btn { background:var(--primary-accent); color:white; font-weight:600; padding:.75rem 1.5rem; border:none; border-radius:.5rem; cursor:pointer; font-family:'Exo',sans-serif; white-space:nowrap; transition:background .2s; }
+    .search-btn:hover { background:#d4661a; }
+    .search-status { display:none; padding:.75rem 1rem; border-radius:.5rem; font-size:.9rem; margin-bottom:1rem; font-weight:600; }
+    .search-status.found { background:#d4edda; color:#155724; border:1px solid #c3e6cb; }
+    .search-status.not-found { background:#fff3cd; color:#856404; border:1px solid #ffeeba; }
+    .search-status.error { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; }
+    /* VALIDATION */
+    .field-error input, .field-error select, .field-error textarea { border-color:var(--danger) !important; background:#fff5f5 !important; }
+    .field-error label { color:var(--danger); }
+    /* FOOTER */
+    .form-footer { display:flex; justify-content:space-between; align-items:center; margin-top:2rem; flex-wrap:wrap; gap:.75rem; }
+    .btn { font-family:'Exo',sans-serif; font-weight:600; font-size:.95rem; padding:.75rem 1.75rem; border:none; border-radius:.5rem; cursor:pointer; transition:background .2s; }
+    .btn-back { background:#6c757d; color:white; }
+    .btn-back:hover { background:#5a6268; }
+    .btn-submit { background:var(--primary-accent); color:white; }
+    .btn-submit:hover { background:#d4661a; }
+    .btn-submit:disabled { background:var(--primary-mid); cursor:not-allowed; }
+    .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.4); border-top-color:white; border-radius:50%; animation:spin .7s linear infinite; margin-right:6px; vertical-align:middle; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .success-banner { display:none; padding:1rem 1.25rem; background:#d4edda; border:1px solid #c3e6cb; color:#155724; border-radius:.5rem; margin-bottom:1rem; font-weight:600; }
+    @media(max-width:600px){ .container{margin:-30px 1rem 40px;padding:1.25rem} .field-grid{grid-template-columns:1fr} .form-footer{flex-direction:column} .btn{width:100%;text-align:center} }
+  </style>
+  <link rel="icon" href="favicon.png" type="image/png">
+</head>
+<body>
+<header>
+  <img src="Field Register Header.png" alt="Field Register Logo" class="header-logo" />
+</header>
+<main class="container">
+<div class="form-wrapper">
+
+  <!-- NAV -->
+  <div class="form-switcher">
+    <h2>Select Operation</h2>
+    <div class="nav-buttons" id="navButtons">
+      <button class="nav-btn" data-target="panel-inventory">Inventory Received</button>
+      <button class="nav-btn" data-target="panel-workforce">Field Workforce Materials Request</button>
+      <button class="nav-btn" data-target="panel-daily">Daily Materials Used</button>
+      <button class="nav-btn" data-target="panel-bog">Boots on Ground</button>
+    </div>
+  </div>
+
+  <!-- ══ INVENTORY RECEIVED ══ -->
+  <div class="form-panel" id="panel-inventory">
+    <div class="panel-title">Inventory Received</div>
+    <div class="panel-subtitle">Complete all required fields before submitting.</div>
+    <div class="form-wrapper">
+      <div class="success-banner" id="inv-success"></div>
+      <form id="formInventory" novalidate>
+        <div class="field-grid">
+          <div class="field-group" id="invgrp-state">
+            <label for="inv-state">Warehouse State <span class="req">*</span></label>
+            <select id="inv-state" required>
+              <option value="">— Select State —</option>
+            </select>
+          </div>
+          <div class="field-group" id="invgrp-location">
+            <label for="inv-location">Warehouse Location <span class="req">*</span></label>
+            <select id="inv-location" required disabled>
+              <option value="">— Select State First —</option>
+            </select>
+          </div>
+          <div class="field-group" id="invgrp-manager">
+            <label for="inv-manager">Warehouse Manager Name <span class="req">*</span></label>
+            <input type="text" id="inv-manager" placeholder="Auto-filled from location" readonly />
+          </div>
+          <div class="field-group" id="invgrp-date">
+            <label for="inv-date">Date of Materials Receipt <span class="req">*</span></label>
+            <input type="date" id="inv-date" required />
+          </div>
+          <div class="field-group full" id="invgrp-docket">
+            <label for="inv-docket">Materials match delivery order / docket? <span class="req">*</span></label>
+            <select id="inv-docket" required style="max-width:320px;">
+              <option value="">— Select —</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Materials Received</span><div class="divider-line"></div></div>
+        <div class="notice-box" id="inv-notice">Select a Warehouse State and Location above to load materials.</div>
+        <div class="subsections" id="inv-subsections"></div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <button type="submit" class="btn btn-submit" id="inv-submitBtn">Submit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══ FIELD WORKFORCE MATERIALS REQUEST ══ -->
+  <div class="form-panel" id="panel-workforce">
+    <div class="panel-title">Field Workforce Materials Request</div>
+    <div class="panel-subtitle">Search an existing Request ID to enter received quantities, or complete the form below to submit a new request.</div>
+    <div class="form-wrapper">
+      <div class="success-banner" id="wf-success"></div>
+      <form id="formWorkforce" novalidate>
+        <div class="field-group" style="margin-bottom:1rem;">
+          <label for="wf-reqId">Request ID</label>
+          <div class="search-row">
+            <div class="search-input-wrap">
+              <input type="text" id="wf-reqId" placeholder="e.g. REQ-00123 — leave blank for new request" />
+            </div>
+            <button type="button" class="search-btn" onclick="wfSearch()">Search</button>
+          </div>
+        </div>
+        <div class="search-status" id="wf-searchStatus"></div>
+
+        <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Request Details</span><div class="divider-line"></div></div>
+
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group" id="wfgrp-company">
+            <label for="wf-company">Company Name <span class="req">*</span></label>
+            <select id="wf-company" required><option value="">— Select Company —</option></select>
+          </div>
+          <div class="field-group" id="wfgrp-rep">
+            <label for="wf-rep">Company Representative Name <span class="req">*</span></label>
+            <select id="wf-rep" required disabled><option value="">— Select Company First —</option></select>
+          </div>
+          <div class="field-group" id="wfgrp-email">
+            <label for="wf-email">Email <span class="req">*</span></label>
+            <input type="text" id="wf-email" readonly />
+          </div>
+          <div class="field-group" id="wfgrp-mobile">
+            <label for="wf-mobile">Mobile (10 digits) <span class="req">*</span></label>
+            <input type="text" id="wf-mobile" readonly />
+          </div>
+          <div class="field-group" id="wfgrp-state">
+            <label for="wf-state">Warehouse State <span class="req">*</span></label>
+            <select id="wf-state" required><option value="">— Select State —</option></select>
+          </div>
+          <div class="field-group" id="wfgrp-location">
+            <label for="wf-location">Warehouse Location <span class="req">*</span></label>
+            <select id="wf-location" required disabled><option value="">— Select State First —</option></select>
+          </div>
+          <div class="field-group" id="wfgrp-dateReq">
+            <label for="wf-dateReq">Date of Materials Required <span class="req">*</span></label>
+            <input type="date" id="wf-dateReq" required />
+          </div>
+          <div class="field-group" id="wfgrp-dateColl" style="display:none;">
+            <label for="wf-dateColl">Date Materials Collected</label>
+            <input type="date" id="wf-dateColl" />
+          </div>
+        </div>
+
+        <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Materials Required</span><div class="divider-line"></div></div>
+        <div class="notice-box" id="wf-notice">Select a Warehouse State and Location above to load available materials.</div>
+        <div class="subsections" id="wf-subsections"></div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <button type="submit" class="btn btn-submit" id="wf-submitBtn">Submit Request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══ DAILY MATERIALS USED ══ -->
+  <div class="form-panel" id="panel-daily">
+    <div class="panel-title">Daily Materials Used</div>
+    <div class="panel-subtitle">Record materials installed on site today.</div>
+    <div class="form-wrapper">
+      <div class="success-banner" id="dm-success"></div>
+      <form id="formDaily" novalidate>
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group" id="dmgrp-company">
+            <label for="dm-company">Company Name <span class="req">*</span></label>
+            <select id="dm-company" required><option value="">— Select Company —</option></select>
+          </div>
+          <div class="field-group" id="dmgrp-rep">
+            <label for="dm-rep">Company Representative Name <span class="req">*</span></label>
+            <select id="dm-rep" required disabled><option value="">— Select Company First —</option></select>
+          </div>
+          <div class="field-group" id="dmgrp-email">
+            <label for="dm-email">Email <span class="req">*</span></label>
+            <input type="text" id="dm-email" readonly />
+          </div>
+          <div class="field-group" id="dmgrp-mobile">
+            <label for="dm-mobile">Mobile (10 digits) <span class="req">*</span></label>
+            <input type="text" id="dm-mobile" readonly />
+          </div>
+          <div class="field-group" id="dmgrp-date">
+            <label for="dm-date">Date of Materials Installed <span class="req">*</span></label>
+            <input type="date" id="dm-date" required />
+          </div>
+        </div>
+        <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Materials Used Today</span><div class="divider-line"></div></div>
+        <div class="notice-box" id="dm-notice">Select a Company Representative above to load their on-hand inventory.</div>
+        <div class="subsections" id="dm-subsections"></div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <button type="submit" class="btn btn-submit" id="dm-submitBtn">Submit Daily Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══ BOOTS ON GROUND ══ -->
+  <div class="form-panel" id="panel-bog">
+    <div class="panel-title">Daily Pre-Start: Boots on Ground</div>
+    <div class="panel-subtitle">Please complete prior to starting work. <strong>Submission must be no later than 8am.</strong><br>This does not replace the JHA (JHA to be uploaded to IBISS — one required per site).</div>
+    <div class="form-wrapper">
+      <form id="formBog" novalidate>
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group" id="boggrp-date">
+            <label for="bog-date">Date <span class="req">*</span></label>
+            <input type="date" id="bog-date" required />
+          </div>
+          <div class="field-group" style="justify-content:flex-end;padding-bottom:.25rem;">
+            <label style="margin-bottom:.75rem;">Mobilisation / De-mobilisation</label>
+            <div style="display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;">
+              <label style="font-weight:400;display:flex;align-items:center;gap:.4rem;margin:0;"><input type="checkbox" id="bog-mob" style="width:auto;" /> Mobilisation Day</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:.4rem;margin:0;"><input type="checkbox" id="bog-demob" style="width:auto;" /> De-mobilisation Day</label>
+            </div>
+          </div>
+        </div>
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group" id="boggrp-company">
+            <label for="bog-company">Your Company Name <span class="req">*</span></label>
+            <select id="bog-company" required>
+              <option value="Boretech Contracting">Boretech Contracting</option><option value="Connectit Communications">Connectit Communications</option>
+              <option value="Dawn Techcomms">Dawn Techcomms</option><option value="DDS Underground">DDS Underground</option>
+              <option value="Dizza Communications">Dizza Communications</option><option value="Djara Network Service">Djara Network Service</option>
+              <option value="Feverpitch Enterprises">Feverpitch Enterprises</option><option value="Genus Services" selected>Genus Services</option>
+              <option value="JNJTech Services">JNJTech Services</option><option value="Lightsource">Lightsource</option>
+              <option value="MNC Drilling">MNC Drilling</option><option value="Netline Services">Netline Services</option>
+              <option value="Syndicate Communications">Syndicate Communications</option><option value="TAT Communications">TAT Communications</option>
+              <option value="Versatile Services">Versatile Services</option>
+            </select>
+          </div>
+          <div class="field-group" id="boggrp-discipline">
+            <label for="bog-discipline">Discipline <span class="req">*</span></label>
+            <select id="bog-discipline" required>
+              <option value="">Select one</option>
+              <optgroup label="Survey"><option>Rod and Rope</option><option>Blockage Repair - Survey</option></optgroup>
+              <optgroup label="Construction">
+                <option>Blockage Repair - Construction</option><option>ACM Removal</option><option>Drilling</option>
+                <option>Trenching</option><option>Service Locating</option><option>Pit Installation/Remediation</option>
+                <option>Reinstatement</option><option>Cable Hauling</option><option>Fibre Splicing</option>
+                <option>Fibre Testing</option><option>PON Patching</option><option>Traffic Management</option><option>Supervision</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+        <div class="field-group" style="margin-bottom:1.25rem;" id="boggrp-starttime">
+          <label>Estimated Start Time <span class="req">*</span></label>
+          <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+            <div style="flex:1;min-width:110px;"><label style="font-weight:400;font-size:.82rem;color:var(--primary-mid);margin-bottom:.3rem;">Hour</label><select id="bog-start-hour" required><option value="">Hour</option><option>01</option><option>02</option><option>03</option><option>04</option><option>05</option><option>06</option><option>07</option><option>08</option><option>09</option><option>10</option><option>11</option><option>12</option></select></div>
+            <div style="flex:1;min-width:110px;"><label style="font-weight:400;font-size:.82rem;color:var(--primary-mid);margin-bottom:.3rem;">Minutes</label><select id="bog-start-mins" required><option value="">Mins</option><option value="00">00</option><option value="30">30</option></select></div>
+            <div style="flex:1;min-width:110px;"><label style="font-weight:400;font-size:.82rem;color:var(--primary-mid);margin-bottom:.3rem;">AM/PM</label><select id="bog-start-ampm" required><option value="">AM/PM</option><option>AM</option><option>PM</option></select></div>
+            <div style="flex:1;min-width:110px;"><label style="font-weight:400;font-size:.82rem;color:var(--primary-mid);margin-bottom:.3rem;">Est. Hours Today</label><select id="bog-hours" required><option value="">Hours</option><option value="4">4</option><option value="6">6</option><option value="8">8</option><option value="10">10</option><option value="12">12</option></select></div>
+          </div>
+        </div>
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group full" id="boggrp-siteloc">
+            <label for="bog-siteloc" id="bog-siteloc-lbl">First Site Address <span class="req">*</span></label>
+            <input type="text" id="bog-siteloc" placeholder="Street address" required />
+          </div>
+        </div>
+        <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Onsite Crew</span><div class="divider-line"></div></div>
+        <div id="bog-crew-section">
+          <div class="field-grid" style="margin-bottom:1.25rem;">
+            <div class="field-group" id="boggrp-crewlead"><label for="bog-crewlead">Onsite Crew Lead Name <span class="req">*</span></label><input type="text" id="bog-crewlead" placeholder="Full name" required /></div>
+            <div class="field-group" id="boggrp-crewmobile"><label for="bog-crewmobile">Onsite Crew Lead Mobile <span class="req">*</span></label><input type="text" id="bog-crewmobile" placeholder="04xxxxxxxx" maxlength="10" inputmode="numeric" required /></div>
+            <div class="field-group" id="boggrp-crewemail"><label for="bog-crewemail">Onsite Crew Lead Email</label><input type="text" id="bog-crewemail" placeholder="email@example.com" /></div>
+            <div class="field-group" id="boggrp-crewcount"><label for="bog-crewcount" id="bog-crewcount-lbl">Number of People in Crew at Location <span class="req">*</span></label><input type="number" id="bog-crewcount" min="1" step="1" required /></div>
+            <div class="field-group" id="boggrp-crewnames"><label for="bog-crewnames" id="bog-crewnames-lbl">Select / List Crew Members <span class="req">*</span></label><textarea id="bog-crewnames" rows="3" placeholder="Enter crew member names, one per line" required></textarea></div>
+          </div>
+        </div>
+        <div id="bog-vehicle-section" style="display:none;">
+          <div class="field-grid" style="margin-bottom:1.25rem;">
+            <div class="field-group" id="boggrp-crewveh"><label for="bog-crewveh" id="bog-crewveh-lbl">Number of Crew Vehicles <span class="req">*</span></label><input type="number" id="bog-crewveh" min="0" step="1" /></div>
+            <div class="field-group" id="boggrp-heavyveh"><label for="bog-heavyveh" id="bog-heavyveh-lbl">Number of Heavy Vehicles <span class="req">*</span></label><input type="number" id="bog-heavyveh" min="0" step="1" /><small style="color:var(--primary-mid);font-size:.78rem;margin-top:.3rem;">Claimable when agreed in writing with FCM.</small></div>
+          </div>
+        </div>
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group" id="boggrp-fcm"><label for="bog-fcm">Your Genus FCM <span class="req">*</span></label><select id="bog-fcm" required><option value="">Select one</option><option>Alex McConville</option><option>Franklin Kithinji</option><option>Jason Curd</option><option>Riaz Ejtahed</option></select></div>
+        </div>
+        <div id="bog-swms-section">
+          <div class="section-divider"><div class="divider-line"></div><span class="divider-label">SWMS &amp; Safety</span><div class="divider-line"></div></div>
+          <div class="field-group" style="margin-bottom:1.25rem;">
+            <label>Discipline with Task-Specific SWMS <span class="req">*</span></label>
+            <p style="font-size:.82rem;color:var(--primary-mid);margin-bottom:.6rem;">SWMS-SHEQ-CMS-0011 Site Establishment, SWMS-SHEQ-CMS-0001 Access to Pits &amp; Manholes — required on all sites.<br>SWMS-SHEQ-CMS-0006 Asbestos (ACM) required for all ACM sites.<br>All workers to have signed into Task SWMS being utilised with copy available — latest version.</p>
+            <div style="display:flex;flex-direction:column;gap:.4rem;">
+              <label style="font-weight:400;display:flex;align-items:center;gap:.5rem;margin:0;"><input type="checkbox" name="bog-swms" value="Scoping" style="width:auto;" /> Scoping (0017 Surveying &amp; Scoping)</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:.5rem;margin:0;"><input type="checkbox" name="bog-swms" value="Trenching" style="width:auto;" /> Trenching (0012 Excavation &amp; Trenching)</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:.5rem;margin:0;"><input type="checkbox" name="bog-swms" value="Drilling" style="width:auto;" /> Drilling (0016 Directional Boring, 0012 Excavation &amp; Trenching)</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:.5rem;margin:0;"><input type="checkbox" name="bog-swms" value="Pit Installation" style="width:auto;" /> Pit Installation (0002 Installing Replacing Repairing Pits Manholes)</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:.5rem;margin:0;"><input type="checkbox" name="bog-swms" value="Hauling" style="width:auto;" /> Hauling (0008 Rod Roping &amp; Cable Hauling)</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:.5rem;margin:0;"><input type="checkbox" name="bog-swms" value="Splicing" style="width:auto;" /> Splicing (0007 Cable Jointing)</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:.5rem;margin:0;"><input type="checkbox" name="bog-swms" value="Clear Blockage" style="width:auto;" /> Clear Blockage (0008 Rod Roping &amp; Cable Hauling)</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:.5rem;margin:0;"><input type="checkbox" name="bog-swms" value="Service Locator" style="width:auto;" /> Service Locator (0012 Excavation &amp; Trenching)</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:.5rem;margin:0;"><input type="checkbox" name="bog-swms" value="Reinstatement" style="width:auto;" /> Reinstatement (0012 Excavation &amp; Trenching)</label>
+            </div>
+            <p id="bog-swms-error" style="color:var(--danger);display:none;margin-top:.4rem;font-size:.85rem;">Please select at least one SWMS discipline.</p>
+          </div>
+          <div class="field-group" style="margin-bottom:1.25rem;">
+            <label style="font-weight:400;display:flex;align-items:flex-start;gap:.5rem;margin:0;line-height:1.4;">
+              <input type="checkbox" id="bog-jha" style="width:auto;margin-top:.15rem;flex-shrink:0;" required />
+              <span>I confirm all workers have been inducted and have signed onto the JHA.<br><small style="color:var(--primary-mid);">Please induct all visitors to JHA and complete prior to starting at each site.</small></span>
+            </label>
+          </div>
+          <div class="field-grid" style="margin-bottom:1.25rem;">
+            <div class="field-group" id="boggrp-acm">
+              <label for="bog-acm">Will you be disturbing/modifying any possible ACM while onsite? <span class="req">*</span></label>
+              <select id="bog-acm" onchange="bogToggleACM()" required><option value="">Select one</option><option value="Yes">Yes</option><option value="No">No</option></select>
+            </div>
+            <div class="field-group" id="boggrp-acmyes" style="display:none;">
+              <label for="bog-acmyes">Have you received your Genus ACM Removal Notification Code? <span class="req">*</span></label>
+              <p style="font-size:.8rem;color:var(--primary-mid);margin-bottom:.4rem;">Required for all ACM Pit replacement work.</p>
+              <select id="bog-acmyes"><option value="">Select one</option><option value="Yes">Yes, continue</option><option value="No">No, stop work and contact your Genus FCM</option></select>
+            </div>
+          </div>
+          <div class="field-group" style="margin-bottom:1rem;">
+            <label style="font-weight:400;display:flex;align-items:flex-start;gap:.5rem;margin:0 0 .6rem;"><input type="checkbox" id="bog-gas" style="width:auto;margin-top:.15rem;flex-shrink:0;" /><span>Are appropriate gas monitoring and trench guards in place?<br><small style="color:var(--primary-mid);">Refer to HSE Guidance Note — Spot Sampling (Manhole) Gas Action Chart.</small></span></label>
+            <label style="font-weight:400;display:flex;align-items:flex-start;gap:.5rem;margin:0;"><input type="checkbox" id="bog-excavation" style="width:auto;margin-top:.15rem;flex-shrink:0;" /><span>Is excavation work being conducted today?<br><small style="color:var(--primary-mid);">Refer to HSE Guidance Note – Construction JHA and Excavation permit process.</small></span></label>
+          </div>
+        </div>
+        <div class="field-group" style="margin-bottom:1.5rem;">
+          <label for="bog-comments">Additional Comments</label>
+          <textarea id="bog-comments" rows="3" placeholder="Optional comments..."></textarea>
+        </div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <button type="submit" class="btn btn-submit" id="bog-submitBtn">Submit BOG</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div><!-- /form-wrapper outer -->
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  CONFIGURATION — Airtable
+// ═══════════════════════════════════════════════════
+const AT_TOKEN = 'patbyyxDeG1vyXDt1.bf541626ff51d7ff78db16476566f413b3fd3159d7670838cb27aa2527f754c7';
+const AT_BASE  = 'appLWbPBLepjoO6F4';
+const AT_API   = 'https://api.airtable.com/v0';
+
+const TBL = {
+  warehouses:          'tblbzPycQ8I7pZzl5',
+  subcontractors:      'tblrvtTKRWDm0Agwc',
+  representatives:     'tblutA51et1wwkEVA',
+  materialsQuantities: 'tbldLNJHOmXy6MdRa',
+  inventory:           'tblZmIuHI6Uc38r45',
+  materialsRequest:    'tbl7WEVWq0DlwLhnt',
+  materialsUsed:       'tblgfw9MvYDAtZEHz',
+  bog:                 'tblSl6LaXIAphgQeC',
+};
+
+// Field IDs for key write fields
+const FLD = {
+  // Warehouses
+  wh_state:    'fldJeERLgEW705tIM',
+  wh_location: 'fldrLr0niCF4dbSXE',
+  wh_active:   'fldtiGykrN9ibPItq',
+  // Materials Quantities — location stock fields (State - Location)
+  stock: {
+    'NSW - Cameron Park':    'fldaeaFRWpJRtGCPb',
+    'NSW - Chipping Norton': 'fldlBMKwlmoSPOlCQ',
+    'NSW - Griffith':        'fldZmHm0EPOwBsQSs',
+    'NSW - Queanbeyan':      'fldBiga3PiedzgoNO',
+    'NSW - Wagga Wagga':     'fldctJr5UBekK5sE0',
+    'QLD - Ferndale':        'fldOPcl3jWQYequUe',
+    'QLD - Maryborough':     'fldTXh9qipbs1qfA7',
+    'QLD - Ormeau':          'fldRSC8MzV66qVN7y',
+    'QLD - Rockhampton':     'fld0AOBB03m4HM9lR',
+    'QLD - Toowoomba':       'fldZqplztfOb4HvD9',
+    'QLD - Townsville':      'flduwNhOmFqITcxWP',
+    'SA - Pooraka':          'fldCZrtwUcYpL3m20',
+    'TAS - Davenport':       'fldxiFLMGFtmhOkej',
+    'TAS - Hobart':          'fldnHb2RgbKHQ8E7a',
+    'VIC - Dandenong South': 'fld2mv7RLApjXmHCu',
+    'VIC - Keilor Park':     'fldVzcCBLG75PPiyo',
+    'VIC - Mulgrave':        'fld7nDkNyN07XfqX9',
+    'WA - Exmouth':          'fldxJ3yDtWWbzvkR5',
+    'WA - Kambalda West':    'flduNlIkVdVKv66CY',
+    'WA - Kenwick':          'fldQsIqnXGfStMGpJ',
+    'WA - Malaga':           'fldZTXywNCLzNJ5Ne',
+    'WA - Mt Magnet':        'fldas2cbEz2xAQuOz',
+    'WA - Tom Price':        'fldrZAinqPoKhThp8',
+  },
+  // Inventory Received write fields
+  inv_date:     'fldjvfdBaotkgGmE9',
+  inv_whState:  'fldUjc7PwKUMxwv3u',
+  inv_whLoc:    'fldogFgq6mj1mSUzu',
+  inv_docket:   'fld5PxbxpaWx8vwpe',
+  inv_lineCount:'fldP5Ut8Cx8NPwMy0',
+  // Materials Request write fields
+  mr_company:   'fldsy6zyY5qkRFQCB',
+  mr_rep:       'fldRCbhCLC844i4x0',
+  mr_email:     'fldOXpJ7Gbs90RoTK',
+  mr_mobile:    'fldYHJCqVYzmLIw0f',
+  mr_whState:   'fldPaakLa8ZPTKhte',
+  mr_whLoc:     'fldvx4uTTtGvY61jt',
+  mr_dateReq:   'fld8sZCGLKGVBpkci',
+  mr_dateColl:  'fld6QkfiXY5zhUFMs',
+  mr_lineCount: 'fldh5ltbIRJmHSYut',
+  // Materials Used write fields
+  mu_company:   'fld7hG8n3HpRMA4r9',
+  mu_rep:       'fldxfXXZuYzZt0FTz',
+  mu_email:     'fld89I88Qttc5cRLF',
+  mu_mobile:    'fldMzcCEAzo92W1Wx',
+  mu_date:      'fldtSi37Fokls6K4O',
+  mu_lineCount: 'fldzpeGI8LCVazURo',
+};
+
+const TYPE_ORDER = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery','Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
+
+// ═══════════════════════════════════════════════════
+//  IN-MEMORY CACHE (loaded once on page load)
+// ═══════════════════════════════════════════════════
+let CACHE = { warehouses: null, subcontractors: null, representatives: null, materials: null };
+
+// ═══════════════════════════════════════════════════
+//  AIRTABLE HELPERS
+// ═══════════════════════════════════════════════════
+async function atFetchAll(tableId, params = {}) {
+  let records = [], offset = null;
+  do {
+    const url = new URL(`${AT_API}/${AT_BASE}/${tableId}`);
+    Object.entries(params).forEach(([k,v]) => url.searchParams.append(k, v));
+    if (offset) url.searchParams.append('offset', offset);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${AT_TOKEN}` } });
+    if (!res.ok) throw new Error(`AT ${res.status}: ${await res.text()}`);
+    const d = await res.json();
+    records = records.concat(d.records || []);
+    offset = d.offset || null;
+  } while (offset);
+  return records;
+}
+
+async function atCreate(tableId, fields) {
+  const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  if (!res.ok) throw new Error(`AT create ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function atUpdate(tableId, recordId, fields) {
+  const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}/${recordId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  if (!res.ok) throw new Error(`AT update ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function atSearchByFormula(tableId, formula) {
+  return atFetchAll(tableId, { filterByFormula: formula });
+}
+
+// ═══════════════════════════════════════════════════
+//  INIT: Load all reference data once
+// ═══════════════════════════════════════════════════
+async function initData() {
+  try {
+    const [wh, sc, reps, mats] = await Promise.all([
+      atFetchAll(TBL.warehouses, { filterByFormula: '{Active}=1', fields: ['State','Location','State + Location','Warehouse Manager Name'] }),
+      atFetchAll(TBL.subcontractors, { filterByFormula: '{Active}=1', fields: ['Company Name','Representatives'] }),
+      atFetchAll(TBL.representatives, { filterByFormula: '{Active}=1', fields: ['Full Name','Company','Company Name (from Company)','Email','Mobile'] }),
+      atFetchAll(TBL.materialsQuantities),
+    ]);
+    CACHE.warehouses      = wh;
+    CACHE.subcontractors  = sc;
+    CACHE.representatives = reps;
+    CACHE.materials       = mats;
+
+    // Build warehouse state/location map
+    CACHE.warehouseByState = {};
+    CACHE.warehouseByRecId = {};
+    wh.forEach(r => {
+      const state = r.fields['State'], loc = r.fields['Location'];
+      if (state) {
+        if (!CACHE.warehouseByState[state]) CACHE.warehouseByState[state] = [];
+        CACHE.warehouseByState[state].push(r);
+      }
+      CACHE.warehouseByRecId[r.id] = r;
+    });
+
+    // Build subcontractor map: companyRecId -> company record
+    CACHE.companyByRecId = {};
+    sc.forEach(r => { CACHE.companyByRecId[r.id] = r; });
+
+    // Build rep map: repRecId -> rep record; also by companyRecId
+    CACHE.repByRecId = {};
+    CACHE.repsByCompanyId = {};
+    reps.forEach(r => {
+      CACHE.repByRecId[r.id] = r;
+      const compIds = r.fields['Company'] || [];
+      compIds.forEach(cid => {
+        if (!CACHE.repsByCompanyId[cid]) CACHE.repsByCompanyId[cid] = [];
+        CACHE.repsByCompanyId[cid].push(r);
+      });
+    });
+
+    populateAllDropdowns();
+  } catch(err) {
+    console.error('Init failed:', err);
+    alert('Failed to load data from Airtable: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  POPULATE DROPDOWNS FROM CACHE
+// ═══════════════════════════════════════════════════
+function populateAllDropdowns() {
+  // State dropdowns
+  ['inv-state','wf-state'].forEach(id => buildStateDropdown(document.getElementById(id)));
+  // Company dropdowns
+  ['wf-company','dm-company'].forEach(id => buildCompanyDropdown(document.getElementById(id)));
+  // Set today's date
+  ['inv-date','dm-date'].forEach(id => { const el = document.getElementById(id); if(el) el.value = todayStr(); });
+}
+
+function buildStateDropdown(sel) {
+  if (!sel) return;
+  const saved = sel.value;
+  sel.innerHTML = '<option value="">— Select State —</option>';
+  Object.keys(CACHE.warehouseByState).sort().forEach(state => {
+    const opt = document.createElement('option');
+    opt.value = state; opt.textContent = state;
+    sel.appendChild(opt);
+  });
+  if (saved) sel.value = saved;
+}
+
+function buildLocationDropdown(locSel, state) {
+  if (!locSel) return;
+  locSel.innerHTML = '';
+  if (!state) {
+    locSel.innerHTML = '<option value="">— Select State First —</option>';
+    locSel.disabled = true; return;
+  }
+  const def = document.createElement('option'); def.value = ''; def.textContent = '— Select Location —';
+  locSel.appendChild(def);
+  (CACHE.warehouseByState[state] || []).forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id; // Store the record ID as value
+    opt.textContent = r.fields['Location'];
+    opt.dataset.location = r.fields['Location'];
+    opt.dataset.stateLocation = r.fields['State + Location'];
+    locSel.appendChild(opt);
+  });
+  locSel.disabled = false;
+}
+
+function buildCompanyDropdown(sel) {
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select Company —</option>';
+  CACHE.subcontractors.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id; opt.textContent = r.fields['Company Name'];
+    sel.appendChild(opt);
+  });
+}
+
+function buildRepDropdown(repSel, companyRecId, emailEl, mobileEl) {
+  if (!repSel) return;
+  repSel.innerHTML = '';
+  if (!companyRecId) {
+    repSel.innerHTML = '<option value="">— Select Company First —</option>';
+    repSel.disabled = true;
+    if (emailEl) emailEl.value = '';
+    if (mobileEl) mobileEl.value = '';
+    return;
+  }
+  const def = document.createElement('option'); def.value = ''; def.textContent = '— Select Representative —';
+  repSel.appendChild(def);
+  (CACHE.repsByCompanyId[companyRecId] || []).forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.fields['Full Name'];
+    opt.dataset.email  = r.fields['Email']  || '';
+    opt.dataset.mobile = r.fields['Mobile'] || '';
+    repSel.appendChild(opt);
+  });
+  repSel.disabled = false;
+  if (emailEl) emailEl.value = '';
+  if (mobileEl) mobileEl.value = '';
+}
+
+function fillRepContact(repSel, emailEl, mobileEl) {
+  const opt = repSel.options[repSel.selectedIndex];
+  if (emailEl) emailEl.value  = opt ? (opt.dataset.email  || '') : '';
+  if (mobileEl) mobileEl.value = opt ? (opt.dataset.mobile || '') : '';
+}
+
+// ═══════════════════════════════════════════════════
+//  MATERIALS TABLE BUILDER
+// ═══════════════════════════════════════════════════
+function getStockFieldName(state, location) {
+  return `Current Stock On-Hand (${state} - ${location})`;
+}
+
+function buildMaterialsTable(containerId, mode, stockFieldName) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const records = CACHE.materials;
+  if (!records || !records.length) {
+    container.innerHTML = '<div class="table-empty">No materials found.</div>'; return;
+  }
+
+  const groups = {};
+  records.forEach(r => {
+    const type = r.fields['Type'] || 'Other';
+    if (!groups[type]) groups[type] = [];
+    groups[type].push(r);
+  });
+
+  const orderedTypes = TYPE_ORDER.filter(t => groups[t]).concat(Object.keys(groups).filter(t => !TYPE_ORDER.includes(t)));
+
+  orderedTypes.forEach(type => {
+    const rows = groups[type];
+    const sec = document.createElement('div');
+    sec.className = 'subsection';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'subsection-header';
+    hdr.onclick = () => sec.classList.toggle('open');
+    hdr.innerHTML = `<span class="subsection-title">${type} <span class="subsection-badge">${rows.length} item${rows.length!==1?'s':''}</span></span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
+    sec.appendChild(hdr);
+
+    const body = document.createElement('div');
+    body.className = 'subsection-body'; body.style.overflowX = 'auto';
+
+    const tbl = document.createElement('table');
+    tbl.className = 'mat-table';
+
+    let thead = '';
+    if (mode === 'inv') {
+      thead = '<thead><tr><th>OP Code</th><th>IT Code</th><th>Description</th><th>Bin ID</th><th>Current Stock On-Hand</th><th>Qty Received</th></tr></thead>';
+    } else if (mode === 'wf') {
+      thead = '<thead><tr><th>OP Code</th><th>IT Code</th><th>Description</th><th>Bin ID</th><th>Qty Available</th><th>Qty Requested</th><th>Qty Received</th></tr></thead>';
+    } else if (mode === 'dm') {
+      thead = '<thead><tr><th>OP Code</th><th>IT Code</th><th>Description</th><th>Qty On-Hand</th><th>Qty Used</th></tr></thead>';
+    }
+    tbl.innerHTML = thead;
+
+    const tbody = document.createElement('tbody');
+    rows.forEach(r => {
+      const f = r.fields;
+      const stock = stockFieldName ? (parseFloat(f[stockFieldName]) || 0) : 0;
+      const binId  = f['Bin ID']      || '—';
+      const opCode = f['OP Code']     || '—';
+      const itCode = f['IT Code']     || '—';
+      const desc   = f['Description'] || '—';
+      const tr = document.createElement('tr');
+
+      if (mode === 'inv') {
+        tr.innerHTML = `
+          <td class="code-cell">${opCode}</td><td class="code-cell">${itCode}</td>
+          <td class="desc-cell">${desc}</td><td style="text-align:center">${binId}</td>
+          <td class="stock-cell">${stock}</td>
+          <td><input type="number" class="qty-input inv-qty" data-record="${r.id}" data-stock="${stock}" data-field="${stockFieldName}" min="0" value="" placeholder="0" inputmode="numeric" /></td>`;
+      } else if (mode === 'wf') {
+        tr.innerHTML = `
+          <td class="code-cell">${opCode}</td><td class="code-cell">${itCode}</td>
+          <td class="desc-cell">${desc}</td><td style="text-align:center">${binId}</td>
+          <td class="stock-cell wf-avail" data-stock="${stock}">${stock}</td>
+          <td>
+            <input type="number" class="qty-input wf-req" data-record="${r.id}" data-stock="${stock}" min="0" value="" placeholder="0" inputmode="numeric" />
+            <div class="inline-warn">Exceeds available qty</div>
+          </td>
+          <td>
+            <input type="number" class="qty-input wf-rcv qty-locked" data-record="${r.id}" min="0" value="" placeholder="—" inputmode="numeric" disabled />
+            <div class="inline-warn">Exceeds requested qty</div>
+          </td>`;
+      } else if (mode === 'dm') {
+        const onhand = f['_onhand'] !== undefined ? f['_onhand'] : stock;
+        tr.innerHTML = `
+          <td class="code-cell">${opCode}</td><td class="code-cell">${itCode}</td>
+          <td class="desc-cell">${desc}</td>
+          <td class="stock-cell dm-onhand" data-onhand="${onhand}">${onhand}</td>
+          <td>
+            <input type="number" class="qty-input dm-used" data-record="${r.id}" data-onhand="${onhand}" min="0" value="" placeholder="0" inputmode="numeric" />
+            <div class="inline-warn">Exceeds on-hand qty</div>
+          </td>`;
+      }
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+    body.appendChild(tbl); sec.appendChild(body);
+    container.appendChild(sec);
+  });
+
+  if (mode === 'wf') attachWfListeners();
+  if (mode === 'dm') attachDmListeners();
+}
+
+function attachWfListeners() {
+  document.querySelectorAll('.wf-req').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const avail = parseInt(inp.dataset.stock) || 0;
+      const val   = parseInt(inp.value) || 0;
+      const warn  = inp.nextElementSibling;
+      const cell  = inp.closest('tr')?.querySelector('.wf-avail');
+      if (cell) cell.textContent = Math.max(0, avail - val);
+      const over = val > avail;
+      inp.classList.toggle('qty-over', over);
+      if (warn) warn.style.display = over ? 'block' : 'none';
+    });
+  });
+  document.querySelectorAll('.wf-rcv').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const reqInp = inp.closest('tr')?.querySelector('.wf-req');
+      const max = parseInt(reqInp?.value) || 0;
+      const val = parseInt(inp.value) || 0;
+      const warn = inp.nextElementSibling;
+      const over = val > max;
+      inp.classList.toggle('qty-over', over);
+      if (warn) warn.style.display = over ? 'block' : 'none';
+    });
+  });
+}
+
+function attachDmListeners() {
+  document.querySelectorAll('.dm-used').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const onhand = parseInt(inp.dataset.onhand) || 0;
+      const val    = parseInt(inp.value) || 0;
+      const warn   = inp.nextElementSibling;
+      const over   = val > onhand;
+      inp.classList.toggle('qty-over', over);
+      if (warn) warn.style.display = over ? 'block' : 'none';
+    });
+  });
+}
+
+function setQtyMode(mode) {
+  // mode: 'request' | 'receive'
+  document.querySelectorAll('.wf-req').forEach(inp => {
+    inp.disabled = (mode === 'receive');
+    inp.classList.toggle('qty-locked', mode === 'receive');
+    inp.placeholder = mode === 'receive' ? '—' : '0';
+    if (mode === 'request') { inp.classList.remove('qty-over'); inp.value = ''; }
+  });
+  document.querySelectorAll('.wf-rcv').forEach(inp => {
+    inp.disabled = (mode === 'request');
+    inp.classList.toggle('qty-locked', mode === 'request');
+    inp.placeholder = mode === 'request' ? '—' : '0';
+    if (mode === 'receive') { inp.classList.remove('qty-over'); inp.value = ''; }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  SHARED UTILS
+// ═══════════════════════════════════════════════════
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function showSuccess(bannerId, msg) {
+  const el = document.getElementById(bannerId);
+  el.textContent = msg; el.style.display = 'block';
+  el.scrollIntoView({ behavior:'smooth', block:'center' });
+  setTimeout(() => { el.style.display = 'none'; }, 10000);
+}
+function btnLoading(btn, text='Submitting…') { btn.disabled=true; btn.innerHTML=`<span class="spinner"></span>${text}`; }
+function btnReset(btn, text) { btn.disabled=false; btn.textContent=text; }
+function markErr(id) { document.getElementById(id)?.classList.add('field-error'); }
+function clearErr(id) { document.getElementById(id)?.classList.remove('field-error'); }
+function validateSel(id, grpId) { const v=document.getElementById(id)?.value; if(!v){markErr(grpId);return false;} clearErr(grpId);return true; }
+function validateTxt(id, grpId) { const v=document.getElementById(id)?.value?.trim(); if(!v){markErr(grpId);return false;} clearErr(grpId);return true; }
+
+// NAV
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.target;
+    document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(target).classList.add('active');
+    document.querySelectorAll('.nav-btn').forEach(b => { b.style.display = (b===btn)?'':'none'; b.classList.toggle('active', b===btn); });
+  });
+});
+function goBack() {
+  document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => { b.style.display=''; b.classList.remove('active'); });
+}
+
+// ═══════════════════════════════════════════════════
+//  INVENTORY RECEIVED
+// ═══════════════════════════════════════════════════
+(function() {
+  const stateEl = document.getElementById('inv-state');
+  const locEl   = document.getElementById('inv-location');
+  const mgrEl   = document.getElementById('inv-manager');
+  const notice  = document.getElementById('inv-notice');
+
+  notice.style.display = 'block';
+
+  stateEl.addEventListener('change', function() {
+    buildLocationDropdown(locEl, this.value);
+    mgrEl.value = '';
+    document.getElementById('inv-subsections').innerHTML = '';
+    notice.style.display = this.value ? 'none' : 'block';
+    if (!this.value) notice.style.display = 'block';
+  });
+
+  locEl.addEventListener('change', function() {
+    const opt = this.options[this.selectedIndex];
+    const whRec = opt ? CACHE.warehouseByRecId[this.value] : null;
+    // Auto-fill warehouse manager if field exists
+    mgrEl.value = whRec?.fields?.['Warehouse Manager Name'] || '';
+    const stateVal = stateEl.value;
+    const locVal   = opt?.dataset?.location || '';
+    if (stateVal && locVal) {
+      const sfName = getStockFieldName(stateVal, locVal);
+      buildMaterialsTable('inv-subsections', 'inv', sfName);
+      notice.style.display = 'none';
+    }
+  });
+
+  document.getElementById('formInventory').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    let ok = true;
+    if (!validateSel('inv-state',   'invgrp-state'))    ok = false;
+    if (!validateSel('inv-location','invgrp-location'))  ok = false;
+    if (!validateSel('inv-docket',  'invgrp-docket'))    ok = false;
+    if (!validateTxt('inv-date',    'invgrp-date'))      ok = false;
+    if (!ok) { alert('Please complete all required fields.'); return; }
+    if (document.querySelectorAll('.inv-qty.qty-over').length > 0) { alert('Please correct invalid quantities.'); return; }
+
+    const btn = document.getElementById('inv-submitBtn');
+    btnLoading(btn);
+    try {
+      const locOpt  = locEl.options[locEl.selectedIndex];
+      const locRecId = locEl.value;
+      const stateRecId = (() => {
+        // Find the warehouse record for the state — use first location record's state link if needed
+        // We pass the location record ID directly for both state and location links
+        return locRecId; // Both fields accept same warehouse record per AT schema
+      })();
+
+      const lineItems = [];
+      document.querySelectorAll('.inv-qty').forEach(inp => {
+        const qty = parseInt(inp.value) || 0;
+        if (qty > 0) lineItems.push({ recId: inp.dataset.record, qty, field: inp.dataset.field, stock: parseInt(inp.dataset.stock)||0 });
+      });
+
+      // Create Inventory Received record — link to Warehouse record for state AND location
+      await atCreate(TBL.inventory, {
+        [FLD.inv_date]:      document.getElementById('inv-date').value,
+        [FLD.inv_whState]:   [locRecId],   // Links to Warehouses (state lookup)
+        [FLD.inv_whLoc]:     [locRecId],   // Links to Warehouses (location lookup)
+        [FLD.inv_docket]:    document.getElementById('inv-docket').value,
+        [FLD.inv_lineCount]: lineItems.length,
+      });
+
+      // Update stock in Materials Quantities
+      for (const item of lineItems) {
+        await atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: item.stock + item.qty });
+        // Update cache
+        const cached = CACHE.materials.find(r => r.id === item.recId);
+        if (cached) cached.fields[item.field] = item.stock + item.qty;
+      }
+
+      showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated.`);
+      this.reset();
+      document.getElementById('inv-date').value = todayStr();
+      buildStateDropdown(stateEl);
+      buildLocationDropdown(locEl, '');
+      mgrEl.value = '';
+      document.getElementById('inv-subsections').innerHTML = '';
+      notice.style.display = 'block';
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
+    finally { btnReset(btn, 'Submit'); }
+  });
+})();
+
+// ═══════════════════════════════════════════════════
+//  FIELD WORKFORCE MATERIALS REQUEST
+// ═══════════════════════════════════════════════════
+let wfMode = 'new'; // 'new' | 'receive'
+let wfFoundRecId = null;
+
+(function() {
+  const compEl   = document.getElementById('wf-company');
+  const repEl    = document.getElementById('wf-rep');
+  const emailEl  = document.getElementById('wf-email');
+  const mobileEl = document.getElementById('wf-mobile');
+  const stateEl  = document.getElementById('wf-state');
+  const locEl    = document.getElementById('wf-location');
+  const notice   = document.getElementById('wf-notice');
+  notice.style.display = 'block';
+
+  compEl.addEventListener('change', function() {
+    buildRepDropdown(repEl, this.value, emailEl, mobileEl);
+  });
+  repEl.addEventListener('change', function() {
+    fillRepContact(this, emailEl, mobileEl);
+  });
+  stateEl.addEventListener('change', function() {
+    buildLocationDropdown(locEl, this.value);
+    document.getElementById('wf-subsections').innerHTML = '';
+    notice.style.display = 'block';
+  });
+  locEl.addEventListener('change', function() {
+    const opt = this.options[this.selectedIndex];
+    const loc = opt?.dataset?.location || '';
+    const state = stateEl.value;
+    if (state && loc) {
+      const sfName = getStockFieldName(state, loc);
+      buildMaterialsTable('wf-subsections', 'wf', sfName);
+      setQtyMode(wfMode === 'receive' ? 'receive' : 'request');
+      notice.style.display = 'none';
+    }
+  });
+
+  document.getElementById('formWorkforce').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    let ok = true;
+    if (!validateSel('wf-company',  'wfgrp-company'))  ok = false;
+    if (!validateSel('wf-rep',      'wfgrp-rep'))      ok = false;
+    if (!validateSel('wf-state',    'wfgrp-state'))    ok = false;
+    if (!validateSel('wf-location', 'wfgrp-location')) ok = false;
+    if (!validateTxt('wf-dateReq',  'wfgrp-dateReq'))  ok = false;
+    if (!ok) { alert('Please complete all required fields.'); return; }
+    if (document.querySelectorAll('.wf-req.qty-over, .wf-rcv.qty-over').length > 0) {
+      alert('One or more quantities exceed available stock. Please correct before submitting.'); return;
+    }
+
+    const btn = document.getElementById('wf-submitBtn');
+    btnLoading(btn);
+    try {
+      const repRecId  = document.getElementById('wf-rep').value;
+      const compRecId = document.getElementById('wf-company').value;
+      const locRecId  = document.getElementById('wf-location').value;
+      const locOpt    = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
+      const locName   = locOpt?.dataset?.location || '';
+      const stateName = document.getElementById('wf-state').value;
+      const sfName    = getStockFieldName(stateName, locName);
+
+      if (wfMode === 'receive' && wfFoundRecId) {
+        // Confirm receipt — reduce stock by Qty Received
+        const rcvItems = [];
+        document.querySelectorAll('.wf-rcv').forEach(inp => {
+          const qty = parseInt(inp.value) || 0;
+          if (qty > 0) {
+            const matRec = CACHE.materials.find(r => r.id === inp.dataset.record);
+            const curr = parseFloat(matRec?.fields?.[sfName] || 0);
+            rcvItems.push({ recId: inp.dataset.record, qty, curr, field: sfName });
+          }
+        });
+
+        await atUpdate(TBL.materialsRequest, wfFoundRecId, {
+          [FLD.mr_dateColl]: document.getElementById('wf-dateColl').value || null,
+        });
+
+        for (const item of rcvItems) {
+          await atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: Math.max(0, item.curr - item.qty) });
+          const cached = CACHE.materials.find(r => r.id === item.recId);
+          if (cached) cached.fields[item.field] = Math.max(0, item.curr - item.qty);
+        }
+        showSuccess('wf-success', `✔ Receipt confirmed for ${wfFoundRecId}. ${rcvItems.length} item(s) deducted from stock.`);
+      } else {
+        // New request
+        const reqItems = [];
+        document.querySelectorAll('.wf-req').forEach(inp => {
+          const qty = parseInt(inp.value) || 0;
+          if (qty > 0) reqItems.push({ recId: inp.dataset.record, qty });
+        });
+
+        await atCreate(TBL.materialsRequest, {
+          [FLD.mr_company]:   [compRecId],
+          [FLD.mr_rep]:       [repRecId],
+          [FLD.mr_email]:     [repRecId],
+          [FLD.mr_mobile]:    [repRecId],
+          [FLD.mr_whState]:   [locRecId],
+          [FLD.mr_whLoc]:     [locRecId],
+          [FLD.mr_dateReq]:   document.getElementById('wf-dateReq').value,
+          [FLD.mr_lineCount]: reqItems.length,
+        });
+        showSuccess('wf-success', `✔ Materials request submitted for ${document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex].text}.`);
+      }
+
+      // Reset
+      this.reset();
+      wfMode = 'new'; wfFoundRecId = null;
+      buildStateDropdown(document.getElementById('wf-state'));
+      buildCompanyDropdown(compEl);
+      buildRepDropdown(repEl, '', emailEl, mobileEl);
+      buildLocationDropdown(document.getElementById('wf-location'), '');
+      document.getElementById('wf-subsections').innerHTML = '';
+      document.getElementById('wf-searchStatus').style.display = 'none';
+      document.getElementById('wfgrp-dateColl').style.display = 'none';
+      notice.style.display = 'block';
+      btn.textContent = 'Submit Request';
+      wfUnlockFields();
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
+    finally { btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); }
+  });
+})();
+
+async function wfSearch() {
+  const idVal  = document.getElementById('wf-reqId').value.trim().toUpperCase();
+  const banner = document.getElementById('wf-searchStatus');
+  if (!idVal) { showBanner(banner, 'error', 'Please enter a Request ID.'); return; }
+  if (!/^REQ-\d{5}$/.test(idVal)) { showBanner(banner, 'error', 'Format must be REQ-XXXXX (e.g. REQ-00123).'); return; }
+
+  showBanner(banner, 'found', '🔍 Searching…');
+  try {
+    const recs = await atSearchByFormula(TBL.materialsRequest, `{Request ID}="${idVal}"`);
+    if (!recs.length) {
+      showBanner(banner, 'not-found', `"${idVal}" not found — form ready for a new request.`);
+      wfMode = 'new'; wfFoundRecId = null;
+      document.getElementById('wf-submitBtn').textContent = 'Submit Request';
+      wfUnlockFields(); setQtyMode('request'); return;
+    }
+    const rec = recs[0]; wfFoundRecId = rec.id; wfMode = 'receive';
+    const f = rec.fields;
+
+    // Populate fields from linked lookups
+    const repIds   = f['Company Representative Name'] || [];
+    const compIds  = f['Company Name']  || [];
+    const stateIds = f['Warehouse State']   || [];
+    const locIds   = f['Warehouse Location']|| [];
+
+    // Set company
+    if (compIds[0]) {
+      document.getElementById('wf-company').value = compIds[0];
+      buildRepDropdown(document.getElementById('wf-rep'), compIds[0],
+        document.getElementById('wf-email'), document.getElementById('wf-mobile'));
+    }
+    // Set rep — need small delay for DOM
+    setTimeout(() => {
+      if (repIds[0]) {
+        document.getElementById('wf-rep').value = repIds[0];
+        const repRec = CACHE.repByRecId[repIds[0]];
+        document.getElementById('wf-email').value  = repRec?.fields?.['Email']  || '';
+        document.getElementById('wf-mobile').value = repRec?.fields?.['Mobile'] || '';
+      }
+    }, 50);
+
+    // Set warehouse state/location
+    if (stateIds[0]) {
+      const whRec = CACHE.warehouseByRecId[stateIds[0]];
+      const state = whRec?.fields?.['State'] || '';
+      document.getElementById('wf-state').value = state;
+      buildLocationDropdown(document.getElementById('wf-location'), state);
+      setTimeout(() => {
+        if (locIds[0]) {
+          document.getElementById('wf-location').value = locIds[0];
+          const locOpt = document.getElementById('wf-location').options;
+          const locName = Array.from(locOpt).find(o => o.value === locIds[0])?.dataset?.location || '';
+          if (state && locName) {
+            buildMaterialsTable('wf-subsections', 'wf', getStockFieldName(state, locName));
+            document.getElementById('wf-notice').style.display = 'none';
+          }
+        }
+      }, 80);
+    }
+
+    if (f['Date Required']) document.getElementById('wf-dateReq').value = f['Date Required'];
+
+    wfLockFields();
+    setQtyMode('receive');
+    document.getElementById('wfgrp-dateColl').style.display = '';
+    document.getElementById('wf-submitBtn').textContent = 'Submit Receipt Confirmation';
+    showBanner(banner, 'found', `✔ ${idVal} found — fields locked. Enter quantities received below.`);
+  } catch(err) {
+    showBanner(banner, 'error', 'Search failed: ' + err.message); console.error(err);
+  }
+}
+
+function showBanner(el, cls, msg) { el.className = 'search-status ' + cls; el.textContent = msg; el.style.display = 'block'; }
+
+const WF_LOCK = ['wf-company','wf-rep','wf-state','wf-location','wf-dateReq'];
+function wfLockFields()   { WF_LOCK.forEach(id => { const el=document.getElementById(id); if(el) el.disabled=true; }); }
+function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElementById(id); if(el) el.disabled=false; }); }
+
+// ═══════════════════════════════════════════════════
+//  DAILY MATERIALS USED
+// ═══════════════════════════════════════════════════
+(function() {
+  const compEl   = document.getElementById('dm-company');
+  const repEl    = document.getElementById('dm-rep');
+  const emailEl  = document.getElementById('dm-email');
+  const mobileEl = document.getElementById('dm-mobile');
+  const notice   = document.getElementById('dm-notice');
+  notice.style.display = 'block';
+
+  compEl.addEventListener('change', function() {
+    buildRepDropdown(repEl, this.value, emailEl, mobileEl);
+    document.getElementById('dm-subsections').innerHTML = '';
+    notice.style.display = 'block';
+  });
+  repEl.addEventListener('change', function() {
+    fillRepContact(this, emailEl, mobileEl);
+    if (this.value) {
+      notice.style.display = 'none';
+      loadRepInventory(this.value);
+    } else {
+      document.getElementById('dm-subsections').innerHTML = '';
+      notice.style.display = 'block';
+    }
+  });
+
+  document.getElementById('formDaily').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    let ok = true;
+    if (!validateSel('dm-company', 'dmgrp-company')) ok = false;
+    if (!validateSel('dm-rep',     'dmgrp-rep'))     ok = false;
+    if (!validateTxt('dm-date',    'dmgrp-date'))    ok = false;
+    if (!ok) { alert('Please complete all required fields.'); return; }
+    if (document.querySelectorAll('.dm-used.qty-over').length > 0) {
+      alert('One or more quantities exceed on-hand stock.'); return;
+    }
+
+    const btn = document.getElementById('dm-submitBtn');
+    btnLoading(btn);
+    try {
+      const repRecId  = document.getElementById('dm-rep').value;
+      const compRecId = document.getElementById('dm-company').value;
+      const usedItems = [];
+      document.querySelectorAll('.dm-used').forEach(inp => {
+        const qty = parseInt(inp.value) || 0;
+        if (qty > 0) usedItems.push({ recId: inp.dataset.record, qty });
+      });
+
+      await atCreate(TBL.materialsUsed, {
+        [FLD.mu_company]:   [compRecId],
+        [FLD.mu_rep]:       [repRecId],
+        [FLD.mu_email]:     [repRecId],
+        [FLD.mu_mobile]:    [repRecId],
+        [FLD.mu_date]:      document.getElementById('dm-date').value,
+        [FLD.mu_lineCount]: usedItems.length,
+      });
+
+      showSuccess('dm-success', `✔ Daily record submitted. ${usedItems.length} item(s) recorded.`);
+      this.reset();
+      document.getElementById('dm-date').value = todayStr();
+      buildCompanyDropdown(compEl);
+      buildRepDropdown(repEl, '', emailEl, mobileEl);
+      document.getElementById('dm-subsections').innerHTML = '';
+      notice.style.display = 'block';
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
+    finally { btnReset(btn, 'Submit Daily Record'); }
+  });
+})();
+
+async function loadRepInventory(repRecId) {
+  const container = document.getElementById('dm-subsections');
+  container.innerHTML = '<div class="table-loading">⏳ Calculating on-hand inventory…</div>';
+  try {
+    // Fetch all Materials Request records for this rep where Qty Received exists
+    const reqRecs  = await atSearchByFormula(TBL.materialsRequest, `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`);
+    // Fetch all Materials Used records for this rep
+    const usedRecs = await atSearchByFormula(TBL.materialsUsed, `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`);
+
+    // Build per-location received totals from Materials Quantities stock fields
+    // Since line items are stored in stock fields directly, we calculate per rep via:
+    // Qty On-Hand = sum of all Qty Received (in request records) - sum of all Qty Used (in used records)
+    // For now we annotate each material with 0 onhand until line-item table is set up
+    // This will be refined once the Materials Request Line Items sub-table is created
+    const onhandMap = {}; // materialRecId -> onhand qty
+
+    // Annotate materials cache with onhand
+    const annotated = CACHE.materials.map(r => ({
+      ...r,
+      fields: { ...r.fields, '_onhand': onhandMap[r.id] || 0 }
+    }));
+
+    buildMaterialsTable('dm-subsections', 'dm', null);
+    // Re-render with _onhand values
+    container.innerHTML = '';
+    const groups = {};
+    annotated.forEach(r => {
+      const type = r.fields['Type'] || 'Other';
+      if (!groups[type]) groups[type] = [];
+      groups[type].push(r);
+    });
+    const orderedTypes = TYPE_ORDER.filter(t => groups[t]).concat(Object.keys(groups).filter(t => !TYPE_ORDER.includes(t)));
+    orderedTypes.forEach(type => {
+      const rows = groups[type];
+      const sec = document.createElement('div'); sec.className = 'subsection';
+      const hdr = document.createElement('div'); hdr.className = 'subsection-header';
+      hdr.onclick = () => sec.classList.toggle('open');
+      hdr.innerHTML = `<span class="subsection-title">${type} <span class="subsection-badge">${rows.length} item${rows.length!==1?'s':''}</span></span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
+      sec.appendChild(hdr);
+      const body = document.createElement('div'); body.className = 'subsection-body'; body.style.overflowX = 'auto';
+      const tbl = document.createElement('table'); tbl.className = 'mat-table';
+      tbl.innerHTML = '<thead><tr><th>OP Code</th><th>IT Code</th><th>Description</th><th>Qty On-Hand</th><th>Qty Used</th></tr></thead>';
+      const tbody = document.createElement('tbody');
+      rows.forEach(r => {
+        const f = r.fields; const onhand = f['_onhand'] || 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="code-cell">${f['OP Code']||'—'}</td><td class="code-cell">${f['IT Code']||'—'}</td><td class="desc-cell">${f['Description']||'—'}</td><td class="stock-cell dm-onhand" data-onhand="${onhand}">${onhand}</td><td><input type="number" class="qty-input dm-used" data-record="${r.id}" data-onhand="${onhand}" min="0" value="" placeholder="0" inputmode="numeric" /><div class="inline-warn">Exceeds on-hand qty</div></td>`;
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody); body.appendChild(tbl); sec.appendChild(body);
+      container.appendChild(sec);
+    });
+    attachDmListeners();
+  } catch(err) {
+    container.innerHTML = `<div class="table-empty" style="color:var(--danger);">⚠️ Failed to load inventory: ${err.message}</div>`;
+    console.error(err);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  BOOTS ON GROUND
+// ═══════════════════════════════════════════════════
+document.getElementById('bog-crewmobile').addEventListener('input', function() {
+  this.value = this.value.replace(/\D/g,'').slice(0,10);
+});
+
+function bogToggleACM() {
+  const v = document.getElementById('bog-acm').value;
+  const grp = document.getElementById('boggrp-acmyes');
+  const sel = document.getElementById('bog-acmyes');
+  const show = v === 'Yes';
+  grp.style.display = show ? '' : 'none';
+  sel.required = show;
+  if (!show) sel.value = '';
+}
+
+function bogUpdateMobDemob() {
+  const isMob   = document.getElementById('bog-mob').checked;
+  const isDemob = document.getElementById('bog-demob').checked;
+  const isMobOrDemob = isMob || isDemob;
+  document.getElementById('bog-siteloc-lbl').innerHTML = (isMob?'Departure Address':'First Site Address') + ' <span class="req">*</span>';
+  document.getElementById('bog-crew-section').style.display = isMob ? 'none' : '';
+  document.getElementById('bog-swms-section').style.display = isMob ? 'none' : '';
+  document.getElementById('bog-crewcount-lbl').innerHTML = (isMob?'Number of People Mobilising Today':isDemob?'Number of People De-mobilising Today':'Number of People in Crew at Location') + ' <span class="req">*</span>';
+  document.getElementById('bog-crewnames-lbl').innerHTML = (isMob?'List Names of Workers Mobilising':isDemob?'List Names of Workers De-mobilising':'Select / List Crew Members') + ' <span class="req">*</span>';
+  document.getElementById('bog-vehicle-section').style.display = isMobOrDemob ? '' : 'none';
+  document.getElementById('bog-crewveh-lbl').innerHTML = (isMob?'Number of Crew Vehicles Being Mobilised':'Number of Crew Vehicles Being De-mobilised') + ' <span class="req">*</span>';
+  document.getElementById('bog-heavyveh-lbl').innerHTML = (isMob?'Number of Heavy Vehicles Being Mobilised':'Number of Heavy Vehicles Being De-mobilised') + ' <span class="req">*</span>';
+  document.getElementById('bog-crewveh').required = isMobOrDemob;
+  document.getElementById('bog-heavyveh').required = isMobOrDemob;
+  document.getElementById('bog-crewlead').required = !isMob;
+  document.getElementById('bog-crewmobile').required = !isMob;
+}
+
+document.getElementById('bog-mob').addEventListener('change', function() { if(this.checked) document.getElementById('bog-demob').checked=false; bogUpdateMobDemob(); });
+document.getElementById('bog-demob').addEventListener('change', function() { if(this.checked) document.getElementById('bog-mob').checked=false; bogUpdateMobDemob(); });
+
+document.getElementById('formBog').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const isMob = document.getElementById('bog-mob').checked;
+  if (!isMob) {
+    const checked = document.querySelectorAll('input[name="bog-swms"]:checked');
+    if (!checked.length) { document.getElementById('bog-swms-error').style.display='block'; alert('Please select at least one SWMS discipline.'); return; }
+    document.getElementById('bog-swms-error').style.display='none';
+  }
+  const mobile = document.getElementById('bog-crewmobile').value.trim();
+  if (!isMob && mobile && !/^04\d{8}$/.test(mobile)) { alert('Mobile must be in format 04xxxxxxxx.'); return; }
+
+  const btn = document.getElementById('bog-submitBtn');
+  btnLoading(btn);
+  try {
+    const hour  = document.getElementById('bog-start-hour').value.padStart(2,'0');
+    const mins  = document.getElementById('bog-start-mins').value;
+    const ampm  = document.getElementById('bog-start-ampm').value;
+    const hours = parseFloat(document.getElementById('bog-hours').value) || 0;
+    const swms  = Array.from(document.querySelectorAll('input[name="bog-swms"]:checked')).map(c=>c.value);
+
+    const fields = {
+      'State':                   'N/A',
+      'Date On-Site':            document.getElementById('bog-date').value,
+      'Your Company Name':       document.getElementById('bog-company').value,
+      'Activity':                document.getElementById('bog-discipline').value,
+      'Estimated Start Time':    `${hour}:${mins} ${ampm}`,
+      'Hours in Field':          hours,
+      'First Site Location':     document.getElementById('bog-siteloc').value,
+      'Your Genus FCM':          document.getElementById('bog-fcm').value,
+      'JHA Signed':              document.getElementById('bog-jha').checked,
+      'ACM Disturbance':         document.getElementById('bog-acm').value || null,
+      'Gas Monitoring':          document.getElementById('bog-gas').checked,
+      'Telstra Guards':          document.getElementById('bog-excavation').checked,
+      'Additional Comments':     document.getElementById('bog-comments').value,
+    };
+    if (!isMob) {
+      fields['Onsite Crew Lead']         = document.getElementById('bog-crewlead').value;
+      fields['Onsite Crew Lead Mobile_original'] = document.getElementById('bog-crewmobile').value;
+      fields['Construction Partner Technician Email'] = document.getElementById('bog-crewemail').value;
+      fields['Number of People at Location'] = parseInt(document.getElementById('bog-crewcount').value) || null;
+      fields['List Names of Workers in field'] = document.getElementById('bog-crewnames').value;
+      if (swms.length) fields['SWMS'] = swms;
+      if (document.getElementById('bog-acmyes').value) fields['ACM Removal Notified'] = document.getElementById('bog-acmyes').value;
+    }
+
+    await atCreate(TBL.bog, fields);
+    alert(`✔ BOG submitted successfully!\n\nCompany: ${fields['Your Company Name']}\nDate: ${fields['Date On-Site']}\nStart: ${hour}:${mins} ${ampm}`);
+    this.reset();
+    document.getElementById('bog-date').value = todayStr();
+    bogUpdateMobDemob();
+  } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
+  finally { btnReset(btn, 'Submit BOG'); }
+});
+
+bogUpdateMobDemob();
+
+// ═══════════════════════════════════════════════════
+//  KICK OFF
+// ═══════════════════════════════════════════════════
+initData();
+</script>
+</body>
+</html>
