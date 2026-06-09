@@ -1195,31 +1195,28 @@ let wfFoundRecId = null;
 
 async function loadRequestLineItems(requestId, stockFieldName) {
   try {
-    console.log('%c=== Loading Line Items for Request:', 'color: blue; font-weight: bold', requestId);
+    console.log('%c=== Loading Line Items for Request ID:', 'color: blue; font-weight: bold', requestId);
 
-    // Try multiple formula approaches
-    const formulas = [
-      `{Request}="${requestId}"`,
-      `AND({fldzjlylKhSe8mWD2}="${requestId}")`,
-      `{fldzjlylKhSe8mWD2}="${requestId}"`
-    ];
+    // Get the Request ID string (e.g. "REQ-00051") from the main record
+    const mainRecs = await atSearchByFormula(TBL.materialsRequest, `RECORD_ID()="${requestId}"`);
+    const reqIDStr = mainRecs[0]?.fields['Request ID'] || '';
 
-    let lineItems = [];
+    console.log('Request ID string found:', reqIDStr);
 
-    for (const formula of formulas) {
-      console.log('Trying formula:', formula);
-      const results = await atSearchByFormula(TBL.materialsRequestLines, formula);
-      if (results.length > 0) {
-        lineItems = results;
-        console.log(`✅ Success with formula: ${formula}`);
-        break;
-      }
+    if (!reqIDStr) {
+      console.warn("Could not find Request ID");
+      return;
     }
 
-    console.log(`Found ${lineItems.length} line items`);
+    // Search line items using the Request ID (from Request) lookup field
+    const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
+      `{Request ID (from Request)}="${reqIDStr}"`
+    );
+
+    console.log(`Found ${lineItems.length} line items:`, lineItems);
 
     if (lineItems.length === 0) {
-      console.warn("❌ Still no line items found. Check Airtable manually.");
+      console.warn("No line items found using Request ID");
       return;
     }
 
@@ -1244,6 +1241,7 @@ async function loadRequestLineItems(requestId, stockFieldName) {
             console.log(`✅ Set Requested = ${qtyReq} for ${materialId}`);
           }
           if (rcvInput) {
+            rcvInput.value = qtyRcv;
             rcvInput.disabled = false;
             console.log(`✅ Enabled Received field for ${materialId}`);
           }
