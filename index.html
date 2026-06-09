@@ -1135,13 +1135,20 @@ let wfFoundRecId = null;
 
         const mainRequestId = newRequest.id;
 
-        // Create Line Items
+        // === CREATE LINE ITEMS (using Field IDs for safety) ===
+        console.log('Creating', reqItems.length, 'line items for request', mainRequestId);
+        
         for (const item of reqItems) {
-          await atCreate(TBL.materialsRequestLines, {
-            'Request':       [mainRequestId],
-            'Material':      [item.recId],
-            'Qty Requested': item.qty
-          });
+          try {
+            const lineRecord = await atCreate(TBL.materialsRequestLines, {
+              'fldzjlylKhSe8mWD2': [mainRequestId],   // Request
+              'fldM7zHq6l40DxJPR': [item.recId],      // Material
+              'fldkbdMJjKvi2sp8X': item.qty           // Qty Requested
+            });
+            console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
+          } catch (err) {
+            console.error(`❌ Failed to create line item for ${item.recId}:`, err.message);
+          }
         }
 
         // === RESERVE STOCK (reduce available qty) ===
@@ -1191,13 +1198,13 @@ async function loadRequestLineItems(requestId, stockFieldName) {
     console.log('%c=== Loading Line Items for Request:', 'color: blue; font-weight: bold', requestId);
 
     const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
-      `{Request}="${requestId}"`
+      `{Request}="${requestId}"`   // or use field ID if needed: `fldzjlylKhSe8mWD2="${requestId}"`
     );
 
     console.log(`Found ${lineItems.length} line items:`, lineItems);
 
     if (lineItems.length === 0) {
-      console.warn("No line items found for this request");
+      console.warn("⚠️ No line items found — creation may have failed");
       return;
     }
 
