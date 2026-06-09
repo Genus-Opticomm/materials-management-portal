@@ -1188,42 +1188,51 @@ let wfFoundRecId = null;
 
 async function loadRequestLineItems(requestId, stockFieldName) {
   try {
-    console.log('Loading line items for request:', requestId); // Debug
+    console.log('%c=== Loading Line Items for Request:', 'color: blue; font-weight: bold', requestId);
 
     const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
       `{Request}="${requestId}"`
     );
 
-    console.log('Found line items:', lineItems.length);
+    console.log(`Found ${lineItems.length} line items:`, lineItems);
 
-    lineItems.forEach(line => {
+    if (lineItems.length === 0) {
+      console.warn("No line items found for this request");
+      return;
+    }
+
+    lineItems.forEach((line, index) => {
       const materialId = line.fields['Material'] ? line.fields['Material'][0] : null;
+      const qtyReq = parseInt(line.fields['Qty Requested']) || 0;
+      const qtyRcv = parseInt(line.fields['Qty Received']) || 0;
+
+      console.log(`Line ${index}: Material=${materialId}, Requested=${qtyReq}, Received=${qtyRcv}`);
+
       if (!materialId) return;
 
-      const qtyRequested = parseInt(line.fields['Qty Requested']) || 0;
-      const qtyReceived  = parseInt(line.fields['Qty Received']) || 0;
+      // Multiple attempts with increasing delay
+      [100, 300, 600].forEach(delay => {
+        setTimeout(() => {
+          const reqInput = document.querySelector(`.wf-req[data-record="${materialId}"]`);
+          const rcvInput = document.querySelector(`.wf-rcv[data-record="${materialId}"]`);
 
-      // Find the inputs — give extra time for DOM to settle
-      setTimeout(() => {
-        const reqInput = document.querySelector(`.wf-req[data-record="${materialId}"]`);
-        const rcvInput = document.querySelector(`.wf-rcv[data-record="${materialId}"]`);
+          if (reqInput) {
+            reqInput.value = qtyReq;
+            reqInput.disabled = true;
+            reqInput.classList.add('qty-locked');
+            console.log(`✅ Successfully set Requested qty for ${materialId} → ${qtyReq}`);
+          } else {
+            console.warn(`❌ Could not find .wf-req input for material ${materialId}`);
+          }
 
-        if (reqInput) {
-          reqInput.value = qtyRequested;
-          reqInput.disabled = true;
-          reqInput.classList.add('qty-locked');
-          console.log(`Set requested qty for ${materialId}: ${qtyRequested}`);
-        } else {
-          console.warn(`Could not find .wf-req for material ${materialId}`);
-        }
-
-        if (rcvInput) {
-          rcvInput.value = qtyReceived;
-          rcvInput.disabled = false;           // Make sure it's editable
-          rcvInput.classList.remove('qty-locked');
-          console.log(`Set received qty for ${materialId}: ${qtyReceived}`);
-        }
-      }, 150);
+          if (rcvInput) {
+            rcvInput.value = qtyRcv;
+            rcvInput.disabled = false;
+            rcvInput.classList.remove('qty-locked');
+            console.log(`✅ Successfully enabled Received field for ${materialId}`);
+          }
+        }, delay);
+      });
     });
   } catch (err) {
     console.error('Failed to load line items:', err);
@@ -1308,7 +1317,7 @@ async function wfSearch() {
       // Increased delay to ensure table is fully rendered
       setTimeout(() => {
         loadRequestLineItems(wfFoundRecId, sfName);
-      }, 300);
+      }, 400);
     }
   }
 }, 150);
