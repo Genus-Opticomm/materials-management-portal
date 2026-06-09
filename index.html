@@ -1076,41 +1076,64 @@ let wfFoundRecId = null;
         const rcvItems = [];
         document.querySelectorAll('.wf-rcv').forEach(inp => {
           const qty = parseInt(inp.value) || 0;
-          if (qty > 0) rcvItems.push({ recId: inp.dataset.record, qtyReceived: qty });
+          if (qty > 0) {
+            rcvItems.push({ 
+              recId: inp.dataset.record, 
+              qtyReceived: qty 
+            });
+          }
         });
+
+        if (rcvItems.length === 0) {
+          alert("Please enter at least one Qty Received.");
+          return;
+        }
 
         const locOpt = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
         const locName = locOpt?.dataset?.location || '';
         const stateName = document.getElementById('wf-state').value;
         const stockField = getStockFieldName(stateName, locName);
 
+        // Get Request ID string (e.g. "REQ-00051")
+        const mainRecs = await atSearchByFormula(TBL.materialsRequest, `RECORD_ID()="${wfFoundRecId}"`);
+        const reqIDStr = mainRecs[0]?.fields['Request ID'] || '';
+
         for (const item of rcvItems) {
-          // Update Qty Received
+          // Update Qty Received in line items
           const lineSearch = await atSearchByFormula(TBL.materialsRequestLines, 
-  `{Request}="${wfFoundRecId}"`   // Try this first
+            `{Request ID (from Request)}="${reqIDStr}"`
           );
 
-          if (lineSearch.length > 0) {
-            await atUpdate(TBL.materialsRequestLines, lineSearch[0].id, {
+          // Find the matching line item for this material
+          const matchingLine = lineSearch.find(line => 
+            line.fields['Material'] && line.fields['Material'][0] === item.recId
+          );
+
+          if (matchingLine) {
+            await atUpdate(TBL.materialsRequestLines, matchingLine.id, {
               'Qty Received': item.qtyReceived
             });
+            console.log(`Updated Qty Received for material ${item.recId}`);
           }
 
-          // Stock adjustment: Return (Requested - Received) to available stock
+          // Stock adjustment: Return (Requested - Received) back to warehouse
           const matRec = CACHE.materials.find(r => r.id === item.recId);
           if (!matRec) continue;
 
-          const qtyReq = parseInt(lineSearch[0]?.fields?.['Qty Requested']) || item.qtyReceived;
-          const adjustment = qtyReq - item.qtyReceived;   // Amount to return to stock
+          const qtyRequested = parseInt(matchingLine?.fields?.['Qty Requested']) || item.qtyReceived;
+          const adjustment = qtyRequested - item.qtyReceived;   // positive = return to stock
 
           const currentStock = parseFloat(matRec.fields[stockField]) || 0;
           const newStock = Math.max(0, currentStock + adjustment);
 
-          await atUpdate(TBL.materialsQuantities, item.recId, { [stockField]: newStock });
+          await atUpdate(TBL.materialsQuantities, item.recId, {
+            [stockField]: newStock
+          });
+
           matRec.fields[stockField] = newStock;
         }
 
-        showSuccess('wf-success', `✔ Receipt confirmed for ${wfFoundRecId}. Stock adjusted.`);
+        showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s).`);
       } else {
         // === NEW MATERIALS REQUEST ===
         const reqItems = [];
