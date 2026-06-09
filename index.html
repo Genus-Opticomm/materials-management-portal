@@ -449,6 +449,7 @@ const TBL = {
   materialsRequest:      'tbl7WEVWq0DlwLhnt',
   materialsRequestLines: 'tblWQyFIO1QTnmNbB',
   materialsUsed:         'tblgfw9MvYDAtZEHz',
+  materialsUsedLines:    'tblxktgCxv6few93n',
   bog:                   'tblSl6LaXIAphgQeC',
 };
 
@@ -1409,7 +1410,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
     }
   });
 
-  document.getElementById('formDaily').addEventListener('submit', async function(e) {
+document.getElementById('formDaily').addEventListener('submit', async function(e) {
     e.preventDefault();
     let ok = true;
     if (!validateSel('dm-company', 'dmgrp-company')) ok = false;
@@ -1422,16 +1423,19 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
 
     const btn = document.getElementById('dm-submitBtn');
     btnLoading(btn);
+
     try {
       const repRecId  = document.getElementById('dm-rep').value;
       const compRecId = document.getElementById('dm-company').value;
+
       const usedItems = [];
       document.querySelectorAll('.dm-used').forEach(inp => {
         const qty = parseInt(inp.value) || 0;
         if (qty > 0) usedItems.push({ recId: inp.dataset.record, qty });
       });
 
-      await atCreate(TBL.materialsUsed, {
+      // 1. Create the main Daily Materials Used record
+      const newUsedRecord = await atCreate(TBL.materialsUsed, {
         [FLD.mu_company]:   [compRecId],
         [FLD.mu_rep]:       [repRecId],
         [FLD.mu_email]:     [repRecId],
@@ -1440,74 +1444,106 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
         [FLD.mu_lineCount]: usedItems.length,
       });
 
-      showSuccess('dm-success', `✔ Daily record submitted. ${usedItems.length} item(s) recorded.`);
+      const mainUsedId = newUsedRecord.id;
+
+      // 2. Create Line Items (using Field IDs for reliability)
+      console.log(`Creating ${usedItems.length} usage line items...`);
+      
+      for (const item of usedItems) {
+        try {
+          await atCreate(TBL.materialsUsedLines, {
+            'fldbEHOSuv028hMjD': [mainUsedId],     // "Used" field
+            'fld0u8aUHdRsSIJLm': [item.recId],     // "Material" field
+            'fldGV26CqV55FYGv6': item.qty          // "Qty Used" field
+          });
+          console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
+        } catch (lineErr) {
+          console.error(`Failed to create line item for ${item.recId}:`, lineErr);
+        }
+      }
+
+      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items).`);
+      
+      // Reset form
       this.reset();
       document.getElementById('dm-date').value = todayStr();
       buildCompanyDropdown(compEl);
       buildRepDropdown(repEl, '', emailEl, mobileEl);
       document.getElementById('dm-subsections').innerHTML = '';
       notice.style.display = 'block';
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
-    finally { btnReset(btn, 'Submit Daily Record'); }
-  });
+
+    } catch(err) { 
+      alert('Submission failed: ' + err.message); 
+      console.error(err); 
+    }
+    finally { 
+      btnReset(btn, 'Submit Daily Record'); 
+    }
+});
 })();
 
 async function loadRepInventory(repRecId) {
   const container = document.getElementById('dm-subsections');
-  container.innerHTML = '<div class="table-loading">⏳ Calculating on-hand inventory…</div>';
+  container.innerHTML = '<div class="table-loading">⏳ Calculating representative on-hand inventory...</div>';
+
   try {
-    // Fetch all Materials Request records for this rep where Qty Received exists
-    const reqRecs  = await atSearchByFormula(TBL.materialsRequest, `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`);
-    // Fetch all Materials Used records for this rep
-    const usedRecs = await atSearchByFormula(TBL.materialsUsed, `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`);
+    // 1. Get all Materials Requests for this rep
+    const requests = await atSearchByFormula(TBL.materialsRequest, 
+      `{Company Representative Name}="${repRecId}"`
+    );
+    const requestIds = requests.map(r => r.id);
 
-    // Build per-location received totals from Materials Quantities stock fields
-    // Since line items are stored in stock fields directly, we calculate per rep via:
-    // Qty On-Hand = sum of all Qty Received (in request records) - sum of all Qty Used (in used records)
-    // For now we annotate each material with 0 onhand until line-item table is set up
-    // This will be refined once the Materials Request Line Items sub-table is created
-    const onhandMap = {}; // materialRecId -> onhand qty
+    // 2. Get Received Line Items
+    let receivedLines = [];
+    if (requestIds.length > 0) {
+      const formula = `OR(${requestIds.map(id => `{Request}="${id}"`).join(',')})`;
+      receivedLines = await atSearchByFormula(TBL.materialsRequestLines, formula);
+    }
 
-    // Annotate materials cache with onhand
+    // 3. Get Used Line Items
+    let usedLines = [];
+    if (requestIds.length > 0) {
+      // Search Used Lines linked to the same requests (or improve later with direct rep link)
+      const usedFormula = `OR(${requestIds.map(id => `{Used}="${id}"`).join(',')})`;
+      usedLines = await atSearchByFormula(TBL.materialsUsedLines, usedFormula);
+    }
+
+    // 4. Calculate On-Hand per material
+    const onHandMap = {};
+
+    // Add received quantities
+    receivedLines.forEach(line => {
+      const matId = line.fields['Material'] ? line.fields['Material'][0] : null;
+      if (!matId) return;
+      const qty = parseInt(line.fields['Qty Received']) || 0;
+      onHandMap[matId] = (onHandMap[matId] || 0) + qty;
+    });
+
+    // Subtract used quantities
+    usedLines.forEach(line => {
+      const matId = line.fields['Material'] ? line.fields['Material'][0] : null;
+      if (!matId) return;
+      const qty = parseInt(line.fields['Qty Used']) || 0;
+      onHandMap[matId] = (onHandMap[matId] || 0) - qty;
+    });
+
+    // 5. Annotate materials with current on-hand
     const annotated = CACHE.materials.map(r => ({
       ...r,
-      fields: { ...r.fields, '_onhand': onhandMap[r.id] || 0 }
+      fields: { 
+        ...r.fields, 
+        '_onhand': Math.max(0, onHandMap[r.id] || 0) 
+      }
     }));
 
+    // 6. Build the table
     buildMaterialsTable('dm-subsections', 'dm', null);
-    // Re-render with _onhand values
-    container.innerHTML = '';
-    const groups = {};
-    annotated.forEach(r => {
-      const type = r.fields['Type'] || 'Other';
-      if (!groups[type]) groups[type] = [];
-      groups[type].push(r);
-    });
-    const orderedTypes = TYPE_ORDER.filter(t => groups[t]).concat(Object.keys(groups).filter(t => !TYPE_ORDER.includes(t)));
-    orderedTypes.forEach(type => {
-      const rows = groups[type];
-      const sec = document.createElement('div'); sec.className = 'subsection';
-      const hdr = document.createElement('div'); hdr.className = 'subsection-header';
-      hdr.onclick = () => sec.classList.toggle('open');
-      hdr.innerHTML = `<span class="subsection-title">${type} <span class="subsection-badge">${rows.length} item${rows.length!==1?'s':''}</span></span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
-      sec.appendChild(hdr);
-      const body = document.createElement('div'); body.className = 'subsection-body'; body.style.overflowX = 'auto';
-      const tbl = document.createElement('table'); tbl.className = 'mat-table';
-      tbl.innerHTML = '<thead><tr><th>OP Code</th><th>IT Code</th><th>Description</th><th>Qty On-Hand</th><th>Qty Used</th></tr></thead>';
-      const tbody = document.createElement('tbody');
-      rows.forEach(r => {
-        const f = r.fields; const onhand = f['_onhand'] || 0;
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="code-cell">${f['OP Code']||'—'}</td><td class="code-cell">${f['IT Code']||'—'}</td><td class="desc-cell">${f['Description']||'—'}</td><td class="stock-cell dm-onhand" data-onhand="${onhand}">${onhand}</td><td><input type="number" class="qty-input dm-used" data-record="${r.id}" data-onhand="${onhand}" min="0" value="" placeholder="0" inputmode="numeric" /><div class="inline-warn">Exceeds on-hand qty</div></td>`;
-        tbody.appendChild(tr);
-      });
-      tbl.appendChild(tbody); body.appendChild(tbl); sec.appendChild(body);
-      container.appendChild(sec);
-    });
-    attachDmListeners();
-  } catch(err) {
-    container.innerHTML = `<div class="table-empty" style="color:var(--danger);">⚠️ Failed to load inventory: ${err.message}</div>`;
+
+    console.log(`✅ On-hand calculated for ${Object.keys(onHandMap).length} materials`);
+
+  } catch (err) {
     console.error(err);
+    container.innerHTML = `<div class="table-empty" style="color:var(--danger);">⚠️ Failed to load inventory: ${err.message}</div>`;
   }
 }
 
