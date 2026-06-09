@@ -1085,9 +1085,9 @@ let wfFoundRecId = null;
         const stockField = getStockFieldName(stateName, locName);
 
         for (const item of rcvItems) {
-          // Update Qty Received in line item
+          // Update Qty Received
           const lineSearch = await atSearchByFormula(TBL.materialsRequestLines, 
-            `AND({Request}="${wfFoundRecId}", {Material}="${item.recId}")`
+            `AND({fldzjlylKhSe8mWD2}="${wfFoundRecId}", {fldM7zHq6l40DxJPR}="${item.recId}")`
           );
 
           if (lineSearch.length > 0) {
@@ -1197,14 +1197,15 @@ async function loadRequestLineItems(requestId, stockFieldName) {
   try {
     console.log('%c=== Loading Line Items for Request:', 'color: blue; font-weight: bold', requestId);
 
-    const lineItems = await atSearchByFormula(TBL.materialsRequestLines, 
-      `{Request}="${requestId}"`   // or use field ID if needed: `fldzjlylKhSe8mWD2="${requestId}"`
-    );
+    // Use field ID for "Request" link - more reliable
+    const formula = `AND({fldzjlylKhSe8mWD2}="${requestId}")`;   // fldzjlylKhSe8mWD2 = Request field
+
+    const lineItems = await atSearchByFormula(TBL.materialsRequestLines, formula);
 
     console.log(`Found ${lineItems.length} line items:`, lineItems);
 
     if (lineItems.length === 0) {
-      console.warn("⚠️ No line items found — creation may have failed");
+      console.warn("⚠️ No line items found with field ID query");
       return;
     }
 
@@ -1213,11 +1214,10 @@ async function loadRequestLineItems(requestId, stockFieldName) {
       const qtyReq = parseInt(line.fields['Qty Requested']) || 0;
       const qtyRcv = parseInt(line.fields['Qty Received']) || 0;
 
-      console.log(`Line ${index}: Material=${materialId}, Requested=${qtyReq}, Received=${qtyRcv}`);
+      console.log(`Line ${index}: Material=${materialId}, Req=${qtyReq}, Rcv=${qtyRcv}`);
 
       if (!materialId) return;
 
-      // Multiple attempts with increasing delay
       [100, 300, 600].forEach(delay => {
         setTimeout(() => {
           const reqInput = document.querySelector(`.wf-req[data-record="${materialId}"]`);
@@ -1227,16 +1227,12 @@ async function loadRequestLineItems(requestId, stockFieldName) {
             reqInput.value = qtyReq;
             reqInput.disabled = true;
             reqInput.classList.add('qty-locked');
-            console.log(`✅ Successfully set Requested qty for ${materialId} → ${qtyReq}`);
-          } else {
-            console.warn(`❌ Could not find .wf-req input for material ${materialId}`);
+            console.log(`✅ Set Requested qty ${qtyReq} for ${materialId}`);
           }
-
           if (rcvInput) {
             rcvInput.value = qtyRcv;
             rcvInput.disabled = false;
-            rcvInput.classList.remove('qty-locked');
-            console.log(`✅ Successfully enabled Received field for ${materialId}`);
+            console.log(`✅ Enabled Received field for ${materialId}`);
           }
         }, delay);
       });
