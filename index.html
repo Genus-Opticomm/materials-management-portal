@@ -1484,67 +1484,192 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
 
 async function loadRepInventory(repRecId) {
   const container = document.getElementById('dm-subsections');
-  container.innerHTML = '<div class="table-loading">⏳ Calculating representative on-hand inventory...</div>';
+  container.innerHTML = '<div class="table-loading">⏳ Calculating on-hand inventory for this representative...</div>';
 
   try {
-    // 1. Get all Materials Requests for this rep
-    const requests = await atSearchByFormula(TBL.materialsRequest, 
-      `{Company Representative Name}="${repRecId}"`
-    );
-    const requestIds = requests.map(r => r.id);
+    // ── Step 1: Get all Materials Request header records for this rep ──────────
+    // The field "Company Representative Name" is a linked field — we use FIND()
+    // to match the record ID within the array of linked record IDs.
+    const requests = await atFetchAll(TBL.materialsRequest, {
+      filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`,
+      fields: ['Request ID', 'Materials Request Lines'],
+    });
 
-    // 2. Get Received Line Items
+    // ── Step 2: Collect all Request Line record IDs from those requests ────────
+    const lineIds = [];
+    requests.forEach(r => {
+      (r.fields['Materials Request Lines'] || []).forEach(id => lineIds.push(id));
+    });
+
+    // ── Step 3: Fetch all those Request Lines (each has Material + Qty Received) 
+    // Airtable API lets us filter by RECORD_ID() using OR(). Batch in groups of
+    // 10 to keep URL length safe.
     let receivedLines = [];
-    if (requestIds.length > 0) {
-      const formula = `OR(${requestIds.map(id => `{Request}="${id}"`).join(',')})`;
-      receivedLines = await atSearchByFormula(TBL.materialsRequestLines, formula);
+    if (lineIds.length > 0) {
+      const BATCH = 10;
+      for (let i = 0; i < lineIds.length; i += BATCH) {
+        const batch = lineIds.slice(i, i + BATCH);
+        const formula = batch.length === 1
+          ? `RECORD_ID()="${batch[0]}"`
+          : `OR(${batch.map(id => `RECORD_ID()="${id}"`).join(',')})`;
+        const rows = await atFetchAll(TBL.materialsRequestLines, {
+          filterByFormula: formula,
+          fields: ['Material', 'Qty Received'],
+        });
+        receivedLines = receivedLines.concat(rows);
+      }
     }
 
-    // 3. Get Used Line Items
+    // ── Step 4: Get all Materials Used header records for this rep ─────────────
+    const usedHeaders = await atFetchAll(TBL.materialsUsed, {
+      filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`,
+      fields: ['Materials Used Lines 2'],
+    });
+
+    const usedLineIds = [];
+    usedHeaders.forEach(r => {
+      (r.fields['Materials Used Lines 2'] || []).forEach(id => usedLineIds.push(id));
+    });
+
+    // ── Step 5: Fetch all Used Lines (each has Material + Qty Used) ────────────
     let usedLines = [];
-    if (requestIds.length > 0) {
-      // Search Used Lines linked to the same requests (or improve later with direct rep link)
-      const usedFormula = `OR(${requestIds.map(id => `{Used}="${id}"`).join(',')})`;
-      usedLines = await atSearchByFormula(TBL.materialsUsedLines, usedFormula);
+    if (usedLineIds.length > 0) {
+      const BATCH = 10;
+      for (let i = 0; i < usedLineIds.length; i += BATCH) {
+        const batch = usedLineIds.slice(i, i + BATCH);
+        const formula = batch.length === 1
+          ? `RECORD_ID()="${batch[0]}"`
+          : `OR(${batch.map(id => `RECORD_ID()="${id}"`).join(',')})`;
+        const rows = await atFetchAll(TBL.materialsUsedLines, {
+          filterByFormula: formula,
+          fields: ['Material', 'Qty Used'],
+        });
+        usedLines = usedLines.concat(rows);
+      }
     }
 
-    // 4. Calculate On-Hand per material
+    // ── Step 6: Build on-hand map: materialRecId → qty ────────────────────────
+    // On-Hand = sum(Qty Received across all requests) − sum(Qty Used)
     const onHandMap = {};
 
-    // Add received quantities
     receivedLines.forEach(line => {
-      const matId = line.fields['Material'] ? line.fields['Material'][0] : null;
+      const matId = (line.fields['Material'] || [])[0];
       if (!matId) return;
       const qty = parseInt(line.fields['Qty Received']) || 0;
       onHandMap[matId] = (onHandMap[matId] || 0) + qty;
     });
 
-    // Subtract used quantities
     usedLines.forEach(line => {
-      const matId = line.fields['Material'] ? line.fields['Material'][0] : null;
+      const matId = (line.fields['Material'] || [])[0];
       if (!matId) return;
       const qty = parseInt(line.fields['Qty Used']) || 0;
       onHandMap[matId] = (onHandMap[matId] || 0) - qty;
     });
 
-    // 5. Annotate materials with current on-hand
+    // ── Step 7: Annotate materials cache with _onhand values ──────────────────
     const annotated = CACHE.materials.map(r => ({
       ...r,
-      fields: { 
-        ...r.fields, 
-        '_onhand': Math.max(0, onHandMap[r.id] || 0) 
+      fields: {
+        ...r.fields,
+        '_onhand': Math.max(0, onHandMap[r.id] || 0),
       }
     }));
 
-    // 6. Build the table
-    buildMaterialsTable('dm-subsections', 'dm', null);
+    // ── Step 8: Render the accordion table using annotated data ───────────────
+    buildDMTable('dm-subsections', annotated);
 
-    console.log(`✅ On-hand calculated for ${Object.keys(onHandMap).length} materials`);
+    const totalMatsWithStock = Object.values(onHandMap).filter(v => v > 0).length;
+    console.log(`✅ Rep on-hand: ${receivedLines.length} received lines, ${usedLines.length} used lines, ${totalMatsWithStock} materials with stock`);
 
   } catch (err) {
-    console.error(err);
+    console.error('loadRepInventory error:', err);
     container.innerHTML = `<div class="table-empty" style="color:var(--danger);">⚠️ Failed to load inventory: ${err.message}</div>`;
   }
+}
+
+// Dedicated renderer for Daily Materials Used — uses _onhand field, live qty-used validation
+function buildDMTable(containerId, records) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+
+  const TYPE_ORDER = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery','Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
+
+  const groups = {};
+  records.forEach(r => {
+    const type = r.fields['Type'] || 'Other';
+    if (!groups[type]) groups[type] = [];
+    groups[type].push(r);
+  });
+
+  const orderedTypes = TYPE_ORDER.filter(t => groups[t])
+    .concat(Object.keys(groups).filter(t => !TYPE_ORDER.includes(t)));
+
+  orderedTypes.forEach(type => {
+    const rows = groups[type];
+    const sec = document.createElement('div');
+    sec.className = 'subsection';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'subsection-header';
+    hdr.onclick = () => sec.classList.toggle('open');
+    hdr.innerHTML = `
+      <span class="subsection-title">${type}
+        <span class="subsection-badge">${rows.length} item${rows.length !== 1 ? 's' : ''}</span>
+      </span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>`;
+    sec.appendChild(hdr);
+
+    const body = document.createElement('div');
+    body.className = 'subsection-body';
+    body.style.overflowX = 'auto';
+
+    const tbl = document.createElement('table');
+    tbl.className = 'mat-table';
+    tbl.innerHTML = `<thead><tr>
+      <th>OP Code</th><th>IT Code</th><th>Description</th>
+      <th>Qty On-Hand</th><th>Qty Used</th>
+    </tr></thead>`;
+
+    const tbody = document.createElement('tbody');
+    rows.forEach(r => {
+      const f = r.fields;
+      const onhand = f['_onhand'] !== undefined ? f['_onhand'] : 0;
+      const tr = document.createElement('tr');
+      // Only show rows where rep has stock, but show all so they can see full list
+      tr.innerHTML = `
+        <td class="code-cell">${f['OP Code'] || '—'}</td>
+        <td class="code-cell">${f['IT Code'] || '—'}</td>
+        <td class="desc-cell">${f['Description'] || '—'}</td>
+        <td class="stock-cell dm-onhand${onhand === 0 ? ' low' : ''}" data-onhand="${onhand}">${onhand}</td>
+        <td>
+          <input type="number" class="qty-input dm-used"
+            data-record="${r.id}" data-onhand="${onhand}"
+            min="0" value="" placeholder="${onhand > 0 ? '0' : '—'}"
+            inputmode="numeric" ${onhand === 0 ? 'disabled' : ''} />
+          <div class="inline-warn">Exceeds on-hand qty</div>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+
+    tbl.appendChild(tbody);
+    body.appendChild(tbl);
+    sec.appendChild(body);
+    container.appendChild(sec);
+  });
+
+  // Attach live validation — qty used cannot exceed on-hand, updates live
+  document.querySelectorAll('.dm-used').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const onhand = parseInt(inp.dataset.onhand) || 0;
+      const val    = parseInt(inp.value) || 0;
+      const warn   = inp.nextElementSibling;
+      const over   = val > onhand;
+      inp.classList.toggle('qty-over', over);
+      if (warn) warn.style.display = over ? 'block' : 'none';
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════
