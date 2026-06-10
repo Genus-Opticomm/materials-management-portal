@@ -1403,7 +1403,8 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
     fillRepContact(this, emailEl, mobileEl);
     if (this.value) {
       notice.style.display = 'none';
-      loadRepInventory(this.value);
+      const repName = this.options[this.selectedIndex]?.textContent?.trim() || '';
+      loadRepInventory(this.value, repName);
     } else {
       document.getElementById('dm-subsections').innerHTML = '';
       notice.style.display = 'block';
@@ -1482,29 +1483,28 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
 });
 })();
 
-async function loadRepInventory(repRecId) {
+async function loadRepInventory(repRecId, repName) {
   const container = document.getElementById('dm-subsections');
   container.innerHTML = '<div class="table-loading">⏳ Calculating on-hand inventory for this representative...</div>';
 
   try {
-    // ── Step 1: Find all Materials Request header records for this rep ─────────
-    // "Company Representative Name" is a linked field — equality (=) never matches
-    // linked arrays. FIND + ARRAYJOIN is the correct pattern for Airtable.
+    // ── Step 1: Find all Materials Request records for this rep ──────────────
+    // Must filter by the LOOKUP field (text), not the linked record ID field.
+    // FIND+ARRAYJOIN on a linked field returns empty — confirmed by console testing.
     const requests = await atFetchAll(TBL.materialsRequest, {
-      filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`,
+      filterByFormula: `FIND("${repName}",ARRAYJOIN({Full Name (from Company Representative Name)}))`,
       fields: ['Request ID', 'Materials Request Lines'],
     });
-    console.log(`Found ${requests.length} request(s) for rep ${repRecId}`);
+    console.log(`Found ${requests.length} request(s) for ${repName}`);
 
-    // ── Step 2: Collect all line-item record IDs linked from those requests ─────
+    // ── Step 2: Collect all request line record IDs ───────────────────────────
     const lineIds = [];
     requests.forEach(r => {
       (r.fields['Materials Request Lines'] || []).forEach(id => lineIds.push(id));
     });
     console.log(`Found ${lineIds.length} request line ID(s)`);
 
-    // ── Step 3: Fetch each Request Line to get Material + Qty Received ──────────
-    // Batch in groups of 10 to stay within URL limits.
+    // ── Step 3: Fetch request lines to get Material + Qty Received ────────────
     let receivedLines = [];
     if (lineIds.length > 0) {
       const BATCH = 10;
@@ -1522,19 +1522,19 @@ async function loadRepInventory(repRecId) {
     }
     console.log(`Fetched ${receivedLines.length} received line record(s)`);
 
-    // ── Step 4: Find all Materials Used header records for this rep ─────────────
+    // ── Step 4: Find all Materials Used records for this rep ─────────────────
     const usedHeaders = await atFetchAll(TBL.materialsUsed, {
-      filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`,
+      filterByFormula: `FIND("${repName}",ARRAYJOIN({Full Name (from Company Representative Name)}))`,
       fields: ['Materials Used Lines 2'],
     });
-    console.log(`Found ${usedHeaders.length} used header(s) for rep`);
+    console.log(`Found ${usedHeaders.length} used header(s) for ${repName}`);
 
     const usedLineIds = [];
     usedHeaders.forEach(r => {
       (r.fields['Materials Used Lines 2'] || []).forEach(id => usedLineIds.push(id));
     });
 
-    // ── Step 5: Fetch each Used Line to get Material + Qty Used ─────────────────
+    // ── Step 5: Fetch used lines to get Material + Qty Used ───────────────────
     let usedLines = [];
     if (usedLineIds.length > 0) {
       const BATCH = 10;
@@ -1552,7 +1552,7 @@ async function loadRepInventory(repRecId) {
     }
     console.log(`Fetched ${usedLines.length} used line record(s)`);
 
-    // ── Step 6: Build on-hand map: materialRecId → net qty ──────────────────────
+    // ── Step 6: Calculate on-hand per material ────────────────────────────────
     const onHandMap = {};
 
     receivedLines.forEach(line => {
@@ -1569,7 +1569,7 @@ async function loadRepInventory(repRecId) {
       onHandMap[matId] = (onHandMap[matId] || 0) - qty;
     });
 
-    // ── Step 7: Annotate materials cache with _onhand values ────────────────────
+    // ── Step 7: Annotate materials cache with _onhand values ─────────────────
     const annotated = CACHE.materials.map(r => ({
       ...r,
       fields: {
@@ -1578,7 +1578,7 @@ async function loadRepInventory(repRecId) {
       }
     }));
 
-    // ── Step 8: Render using annotated data ─────────────────────────────────────
+    // ── Step 8: Render using dedicated DM renderer ───────────────────────────
     buildDMTable('dm-subsections', annotated);
 
     const withStock = Object.values(onHandMap).filter(v => v > 0).length;
@@ -1675,6 +1675,7 @@ function buildDMTable(containerId, records) {
     });
   });
 }
+// Dedicated renderer for Daily Materials Used — receives annotated records directly
 
 // ═══════════════════════════════════════════════════
 //  BOOTS ON GROUND
