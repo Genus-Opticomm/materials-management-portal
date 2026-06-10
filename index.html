@@ -1487,23 +1487,24 @@ async function loadRepInventory(repRecId) {
   container.innerHTML = '<div class="table-loading">⏳ Calculating on-hand inventory for this representative...</div>';
 
   try {
-    // ── Step 1: Get all Materials Request header records for this rep ──────────
-    // The field "Company Representative Name" is a linked field — we use FIND()
-    // to match the record ID within the array of linked record IDs.
+    // ── Step 1: Find all Materials Request header records for this rep ─────────
+    // "Company Representative Name" is a linked field — equality (=) never matches
+    // linked arrays. FIND + ARRAYJOIN is the correct pattern for Airtable.
     const requests = await atFetchAll(TBL.materialsRequest, {
       filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`,
       fields: ['Request ID', 'Materials Request Lines'],
     });
+    console.log(`Found ${requests.length} request(s) for rep ${repRecId}`);
 
-    // ── Step 2: Collect all Request Line record IDs from those requests ────────
+    // ── Step 2: Collect all line-item record IDs linked from those requests ─────
     const lineIds = [];
     requests.forEach(r => {
       (r.fields['Materials Request Lines'] || []).forEach(id => lineIds.push(id));
     });
+    console.log(`Found ${lineIds.length} request line ID(s)`);
 
-    // ── Step 3: Fetch all those Request Lines (each has Material + Qty Received) 
-    // Airtable API lets us filter by RECORD_ID() using OR(). Batch in groups of
-    // 10 to keep URL length safe.
+    // ── Step 3: Fetch each Request Line to get Material + Qty Received ──────────
+    // Batch in groups of 10 to stay within URL limits.
     let receivedLines = [];
     if (lineIds.length > 0) {
       const BATCH = 10;
@@ -1519,19 +1520,21 @@ async function loadRepInventory(repRecId) {
         receivedLines = receivedLines.concat(rows);
       }
     }
+    console.log(`Fetched ${receivedLines.length} received line record(s)`);
 
-    // ── Step 4: Get all Materials Used header records for this rep ─────────────
+    // ── Step 4: Find all Materials Used header records for this rep ─────────────
     const usedHeaders = await atFetchAll(TBL.materialsUsed, {
       filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Company Representative Name}))`,
       fields: ['Materials Used Lines 2'],
     });
+    console.log(`Found ${usedHeaders.length} used header(s) for rep`);
 
     const usedLineIds = [];
     usedHeaders.forEach(r => {
       (r.fields['Materials Used Lines 2'] || []).forEach(id => usedLineIds.push(id));
     });
 
-    // ── Step 5: Fetch all Used Lines (each has Material + Qty Used) ────────────
+    // ── Step 5: Fetch each Used Line to get Material + Qty Used ─────────────────
     let usedLines = [];
     if (usedLineIds.length > 0) {
       const BATCH = 10;
@@ -1547,9 +1550,9 @@ async function loadRepInventory(repRecId) {
         usedLines = usedLines.concat(rows);
       }
     }
+    console.log(`Fetched ${usedLines.length} used line record(s)`);
 
-    // ── Step 6: Build on-hand map: materialRecId → qty ────────────────────────
-    // On-Hand = sum(Qty Received across all requests) − sum(Qty Used)
+    // ── Step 6: Build on-hand map: materialRecId → net qty ──────────────────────
     const onHandMap = {};
 
     receivedLines.forEach(line => {
@@ -1566,7 +1569,7 @@ async function loadRepInventory(repRecId) {
       onHandMap[matId] = (onHandMap[matId] || 0) - qty;
     });
 
-    // ── Step 7: Annotate materials cache with _onhand values ──────────────────
+    // ── Step 7: Annotate materials cache with _onhand values ────────────────────
     const annotated = CACHE.materials.map(r => ({
       ...r,
       fields: {
@@ -1575,11 +1578,11 @@ async function loadRepInventory(repRecId) {
       }
     }));
 
-    // ── Step 8: Render the accordion table using annotated data ───────────────
+    // ── Step 8: Render using annotated data ─────────────────────────────────────
     buildDMTable('dm-subsections', annotated);
 
-    const totalMatsWithStock = Object.values(onHandMap).filter(v => v > 0).length;
-    console.log(`✅ Rep on-hand: ${receivedLines.length} received lines, ${usedLines.length} used lines, ${totalMatsWithStock} materials with stock`);
+    const withStock = Object.values(onHandMap).filter(v => v > 0).length;
+    console.log(`✅ Rep on-hand: ${receivedLines.length} received lines, ${usedLines.length} used lines, ${withStock} materials with stock`);
 
   } catch (err) {
     console.error('loadRepInventory error:', err);
@@ -1587,12 +1590,13 @@ async function loadRepInventory(repRecId) {
   }
 }
 
-// Dedicated renderer for Daily Materials Used — uses _onhand field, live qty-used validation
+// Dedicated renderer for Daily Materials Used — receives annotated records directly
 function buildDMTable(containerId, records) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
 
-  const TYPE_ORDER = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery','Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
+  const TYPE_ORDER = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery',
+    'Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
 
   const groups = {};
   records.forEach(r => {
@@ -1606,7 +1610,7 @@ function buildDMTable(containerId, records) {
 
   orderedTypes.forEach(type => {
     const rows = groups[type];
-    const sec = document.createElement('div');
+    const sec  = document.createElement('div');
     sec.className = 'subsection';
 
     const hdr = document.createElement('div');
@@ -1634,20 +1638,20 @@ function buildDMTable(containerId, records) {
 
     const tbody = document.createElement('tbody');
     rows.forEach(r => {
-      const f = r.fields;
+      const f      = r.fields;
       const onhand = f['_onhand'] !== undefined ? f['_onhand'] : 0;
+      const noStock = onhand === 0;
       const tr = document.createElement('tr');
-      // Only show rows where rep has stock, but show all so they can see full list
       tr.innerHTML = `
         <td class="code-cell">${f['OP Code'] || '—'}</td>
         <td class="code-cell">${f['IT Code'] || '—'}</td>
         <td class="desc-cell">${f['Description'] || '—'}</td>
-        <td class="stock-cell dm-onhand${onhand === 0 ? ' low' : ''}" data-onhand="${onhand}">${onhand}</td>
+        <td class="stock-cell${noStock ? ' low' : ''}" data-onhand="${onhand}">${onhand}</td>
         <td>
           <input type="number" class="qty-input dm-used"
             data-record="${r.id}" data-onhand="${onhand}"
-            min="0" value="" placeholder="${onhand > 0 ? '0' : '—'}"
-            inputmode="numeric" ${onhand === 0 ? 'disabled' : ''} />
+            min="0" value="" placeholder="${noStock ? '—' : '0'}"
+            inputmode="numeric" ${noStock ? 'disabled' : ''} />
           <div class="inline-warn">Exceeds on-hand qty</div>
         </td>`;
       tbody.appendChild(tr);
@@ -1659,8 +1663,8 @@ function buildDMTable(containerId, records) {
     container.appendChild(sec);
   });
 
-  // Attach live validation — qty used cannot exceed on-hand, updates live
-  document.querySelectorAll('.dm-used').forEach(inp => {
+  // Live validation — qty used cannot exceed on-hand
+  document.querySelectorAll('.dm-used:not([disabled])').forEach(inp => {
     inp.addEventListener('input', () => {
       const onhand = parseInt(inp.dataset.onhand) || 0;
       const val    = parseInt(inp.value) || 0;
