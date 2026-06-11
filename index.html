@@ -91,6 +91,7 @@
     .stock-cell { text-align:center; font-weight:600; }
     .qty-input { width:80px !important; padding:.4rem .5rem !important; font-size:.9rem !important; text-align:center; border-radius:.4rem !important; }
     .qty-locked { background:#f4f4f4 !important; color:var(--primary-mid) !important; }
+    .qty-locked-value { background:#ffffff !important; color:var(--primary-dark) !important; font-weight:600; }
     .qty-over { border-color:var(--danger) !important; background:#fff5f5 !important; }
     .inline-warn { color:var(--danger); font-size:.78rem; margin-top:.2rem; display:none; }
     /* LOADING */
@@ -138,7 +139,8 @@
       <button class="nav-btn" data-target="panel-inventory">Inventory Received</button>
       <button class="nav-btn" data-target="panel-workforce">Field Workforce Materials Request</button>
       <button class="nav-btn" data-target="panel-daily">Daily Materials Used</button>
-      <button class="nav-btn" data-target="panel-bog">Boots on Ground</button>
+      <!-- Boots on Ground button hidden until fields confirmed — code preserved below -->
+      <!-- <button class="nav-btn" data-target="panel-bog">Boots on Ground</button> -->
     </div>
   </div>
 
@@ -279,6 +281,10 @@
           <div class="field-group" id="dmgrp-mobile">
             <label for="dm-mobile">Mobile (10 digits) <span class="req">*</span></label>
             <input type="text" id="dm-mobile" readonly />
+          </div>
+          <div class="field-group" id="dmgrp-jobcode">
+            <label for="dm-jobcode">Job Code <span class="req">*</span></label>
+            <input type="text" id="dm-jobcode" placeholder="Enter project ID" required />
           </div>
           <div class="field-group" id="dmgrp-date">
             <label for="dm-date">Date of Materials Installed <span class="req">*</span></label>
@@ -914,6 +920,47 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
   });
 });
 function goBack() {
+  // Reset Inventory Received
+  try {
+    document.getElementById('formInventory').reset();
+    document.getElementById('inv-date').value = todayStr();
+    const invState = document.getElementById('inv-state');
+    buildStateDropdown(invState);
+    buildLocationDropdown(document.getElementById('inv-location'), '');
+    document.getElementById('inv-manager').value = '';
+    document.getElementById('inv-subsections').innerHTML = '';
+    document.getElementById('inv-notice').style.display = 'block';
+  } catch(e) {}
+
+  // Reset Field Workforce Materials Request
+  try {
+    document.getElementById('formWorkforce').reset();
+    document.getElementById('wf-searchStatus').style.display = 'none';
+    document.getElementById('wf-reqId').value = '';
+    buildStateDropdown(document.getElementById('wf-state'));
+    buildLocationDropdown(document.getElementById('wf-location'), '');
+    buildCompanyDropdown(document.getElementById('wf-company'));
+    buildRepDropdown(document.getElementById('wf-rep'), '', document.getElementById('wf-email'), document.getElementById('wf-mobile'));
+    document.getElementById('wf-subsections').innerHTML = '';
+    document.getElementById('wf-notice').style.display = 'block';
+    document.getElementById('wfgrp-dateColl').style.display = 'none';
+    document.getElementById('wf-submitBtn').textContent = 'Submit Request';
+    wfMode = 'new'; wfFoundRecId = null;
+    wfUnlockFields();
+    setQtyMode('request');
+  } catch(e) {}
+
+  // Reset Daily Materials Used
+  try {
+    document.getElementById('formDaily').reset();
+    document.getElementById('dm-date').value = todayStr();
+    document.getElementById('dm-jobcode').value = '';
+    buildCompanyDropdown(document.getElementById('dm-company'));
+    buildRepDropdown(document.getElementById('dm-rep'), '', document.getElementById('dm-email'), document.getElementById('dm-mobile'));
+    document.getElementById('dm-subsections').innerHTML = '';
+    document.getElementById('dm-notice').style.display = 'block';
+  } catch(e) {}
+
   document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => { b.style.display=''; b.classList.remove('active'); });
 }
@@ -1261,7 +1308,13 @@ async function loadRequestLineItems(requestId, stockFieldName) {
       if (reqInput) {
         reqInput.value = qtyRequested;
         reqInput.disabled = true;
-        reqInput.classList.add('qty-locked');
+        if (qtyRequested > 0) {
+          reqInput.classList.remove('qty-locked');
+          reqInput.classList.add('qty-locked-value');
+        } else {
+          reqInput.classList.add('qty-locked');
+          reqInput.classList.remove('qty-locked-value');
+        }
       }
 
       if (rcvInput) {
@@ -1416,6 +1469,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
     let ok = true;
     if (!validateSel('dm-company', 'dmgrp-company')) ok = false;
     if (!validateSel('dm-rep',     'dmgrp-rep'))     ok = false;
+    if (!validateTxt('dm-jobcode', 'dmgrp-jobcode')) ok = false;
     if (!validateTxt('dm-date',    'dmgrp-date'))    ok = false;
     if (!ok) { alert('Please complete all required fields.'); return; }
     if (document.querySelectorAll('.dm-used.qty-over').length > 0) {
@@ -1442,6 +1496,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         [FLD.mu_email]:     [repRecId],
         [FLD.mu_mobile]:    [repRecId],
         [FLD.mu_date]:      document.getElementById('dm-date').value,
+        'Job Code':         document.getElementById('dm-jobcode').value.trim(),
         [FLD.mu_lineCount]: usedItems.length,
       });
 
@@ -1453,9 +1508,10 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       for (const item of usedItems) {
         try {
           await atCreate(TBL.materialsUsedLines, {
-            'fldbEHOSuv028hMjD': [mainUsedId],     // "Used" field
-            'fld0u8aUHdRsSIJLm': [item.recId],     // "Material" field
-            'fldGV26CqV55FYGv6': item.qty          // "Qty Used" field
+            'fldbEHOSuv028hMjD': [mainUsedId],                                   // "Used" field
+            'fld0u8aUHdRsSIJLm': [item.recId],                                   // "Material" field
+            'fldGV26CqV55FYGv6': item.qty,                                        // "Qty Used" field
+            'flduIFkorq5wVuNNz': document.getElementById('dm-date').value,        // "Date Used" field
           });
           console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
         } catch (lineErr) {
@@ -1468,6 +1524,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       // Reset form
       this.reset();
       document.getElementById('dm-date').value = todayStr();
+      document.getElementById('dm-jobcode').value = '';
       buildCompanyDropdown(compEl);
       buildRepDropdown(repEl, '', emailEl, mobileEl);
       document.getElementById('dm-subsections').innerHTML = '';
@@ -1496,12 +1553,15 @@ async function loadRepInventory(repRecId, repName) {
     });
     console.log(`Found ${requests.length} request(s) for ${repName}`);
 
+    // ── Step 2: Collect all line-item record IDs linked from those requests ─────
     const lineIds = [];
     requests.forEach(r => {
       (r.fields['Materials Request Lines'] || []).forEach(id => lineIds.push(id));
     });
     console.log(`Found ${lineIds.length} request line ID(s)`);
 
+    // ── Step 3: Fetch each Request Line to get Material + Qty Received ──────────
+    // Batch in groups of 10 to stay within URL limits.
     let receivedLines = [];
     if (lineIds.length > 0) {
       const BATCH = 10;
@@ -1519,6 +1579,7 @@ async function loadRepInventory(repRecId, repName) {
     }
     console.log(`Fetched ${receivedLines.length} received line record(s)`);
 
+    // ── Step 4: Find all Materials Used header records for this rep ─────────────
     const usedHeaders = await atFetchAll(TBL.materialsUsed, {
       filterByFormula: `FIND("${repName}",ARRAYJOIN({Full Name (from Company Representative Name)}))`,
       fields: ['Materials Used Lines 2'],
@@ -1530,6 +1591,7 @@ async function loadRepInventory(repRecId, repName) {
       (r.fields['Materials Used Lines 2'] || []).forEach(id => usedLineIds.push(id));
     });
 
+    // ── Step 5: Fetch each Used Line to get Material + Qty Used ─────────────────
     let usedLines = [];
     if (usedLineIds.length > 0) {
       const BATCH = 10;
@@ -1547,23 +1609,28 @@ async function loadRepInventory(repRecId, repName) {
     }
     console.log(`Fetched ${usedLines.length} used line record(s)`);
 
+    // ── Step 6: Build on-hand map: materialRecId → net qty ──────────────────────
     const onHandMap = {};
+
     receivedLines.forEach(line => {
       const matId = (line.fields['Material'] || [])[0];
       if (!matId) return;
       onHandMap[matId] = (onHandMap[matId] || 0) + (parseInt(line.fields['Qty Received']) || 0);
     });
+
     usedLines.forEach(line => {
       const matId = (line.fields['Material'] || [])[0];
       if (!matId) return;
       onHandMap[matId] = (onHandMap[matId] || 0) - (parseInt(line.fields['Qty Used']) || 0);
     });
 
+    // ── Step 7: Annotate materials cache with _onhand values ────────────────────
     const annotated = CACHE.materials.map(r => ({
       ...r,
       fields: { ...r.fields, '_onhand': Math.max(0, onHandMap[r.id] || 0) }
     }));
 
+    // ── Step 8: Render using annotated data ─────────────────────────────────────
     buildDMTable('dm-subsections', annotated);
 
     const withStock = Object.values(onHandMap).filter(v => v > 0).length;
@@ -1575,6 +1642,7 @@ async function loadRepInventory(repRecId, repName) {
   }
 }
 
+// Dedicated renderer for Daily Materials Used — receives annotated records directly
 function buildDMTable(containerId, records) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
@@ -1647,6 +1715,7 @@ function buildDMTable(containerId, records) {
     container.appendChild(sec);
   });
 
+  // Live validation — qty used cannot exceed on-hand
   document.querySelectorAll('.dm-used:not([disabled])').forEach(inp => {
     inp.addEventListener('input', () => {
       const onhand = parseInt(inp.dataset.onhand) || 0;
@@ -1655,10 +1724,16 @@ function buildDMTable(containerId, records) {
       const over   = val > onhand;
       inp.classList.toggle('qty-over', over);
       if (warn) warn.style.display = over ? 'block' : 'none';
+      // Live update the Qty On-Hand cell to show remaining
+      const onhandCell = inp.closest('tr')?.querySelector('.stock-cell');
+      if (onhandCell) {
+        const remaining = Math.max(0, onhand - (over ? onhand : val));
+        onhandCell.textContent = remaining;
+        onhandCell.classList.toggle('low', remaining === 0);
+      }
     });
   });
 }
-// Dedicated renderer for Daily Materials Used — receives annotated records directly
 
 // ═══════════════════════════════════════════════════
 //  BOOTS ON GROUND
