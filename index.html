@@ -499,14 +499,14 @@ const FLD = {
   inv_whLoc:    'fldogFgq6mj1mSUzu',
   inv_docket:   'fld5PxbxpaWx8vwpe',
   inv_lineCount:'fldP5Ut8Cx8NPwMy0',
-  // Inventory Received Lines fields
   irl_receipt:  'fldC0bYpvOmq2lI4p',
   irl_material: 'fldwidUBYyH1NfsP4',
   irl_qty:      'fld9AfCPL8LSjbFSF',
   irl_wsr:      'fldshdAXfoa9465yp',
-  // Warehouse Stock Report fields
   wsr_warehouse:'fldu6sknxKulEFMP7',
   wsr_material: 'fldVKATUzvdbV6brN',
+  wsr_mrlLines: 'fldyvmOr9Osm0wZ1U',   // WSR → Materials Request Lines (Collected)
+  wsr_mrlReq:   'fldNbMU9i8X0wfFV2',   // WSR → Materials Request Lines (Requested)
   inv_manager:  'fld8PSTgb3CAO4MHs',
   // Materials Request write fields
   mr_company:   'fldsy6zyY5qkRFQCB',
@@ -518,6 +518,8 @@ const FLD = {
   mr_dateReq:   'fld8sZCGLKGVBpkci',
   mr_dateColl:  'fld6QkfiXY5zhUFMs',
   mr_lineCount: 'fldh5ltbIRJmHSYut',
+  mrl_wsr_coll: 'fldyvmOr9Osm0wZ1U',   // Materials Request Lines → WSR (Collected link field on WSR side — used via WSR update)
+  mrl_wsr_req:  'fldNbMU9i8X0wfFV2',   // Materials Request Lines → WSR (Requested link field on WSR side)
   // Materials Used write fields
   mu_company:   'fld7hG8n3HpRMA4r9',
   mu_rep:       'fldxfXXZuYzZt0FTz',
@@ -1045,27 +1047,18 @@ function goBack() {
         [FLD.inv_manager]:   [locRecId],
       });
       const invRecordId = invRecord.id;
-      console.log('Created Inventory Received record:', invRecordId);
 
-      // ── Step B: Per line item — update stock, find/create WSR row, write line record
-      // Get the location name and state from the cache for use in WSR lookup
       const whCacheRec   = CACHE.warehouseByRecId[locRecId];
       const locationName = whCacheRec?.fields?.['Location'] || '';
-      const stateName    = whCacheRec?.fields?.['State'] || '';
 
       for (const item of lineItems) {
-
-        // B1: Update stock on-hand in Materials Quantities (existing behaviour)
         await atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: item.stock + item.qty });
         const cached = CACHE.materials.find(r => r.id === item.recId);
         if (cached) cached.fields[item.field] = item.stock + item.qty;
 
-        // B2: Get the Bin ID for this material from cache (used in WSR lookup)
         const matCacheRec = CACHE.materials.find(r => r.id === item.recId);
         const binId       = matCacheRec?.fields?.['Bin ID'] || '';
 
-        // B3: Find or auto-create Warehouse Stock Report row using lookup text fields
-        // Filter by Warehouse Location text + Bin ID text — confirmed working approach
         let wsrRecordId = null;
         try {
           const wsrRows = await atFetchAll(TBL.warehouseStockReport, {
@@ -1074,14 +1067,13 @@ function goBack() {
           });
           if (wsrRows.length > 0) {
             wsrRecordId = wsrRows[0].id;
-            console.log(`Found WSR row: ${wsrRecordId} (${locationName} | Bin ${binId})`);
           } else {
             const newWsr = await atCreate(TBL.warehouseStockReport, {
               [FLD.wsr_warehouse]: [locRecId],
               [FLD.wsr_material]:  [item.recId],
             });
             wsrRecordId = newWsr.id;
-            console.log(`Created WSR row: ${wsrRecordId} (${locationName} | Bin ${binId})`);
+            console.log(`Created WSR row: ${locationName} | Bin ${binId}`);
           }
         } catch(wsrErr) {
           console.warn('WSR find/create failed:', wsrErr.message);
@@ -1236,6 +1228,15 @@ let wfFoundRecId = null;
           matRec.fields[stockField] = newStock;
         }
 
+        // Write Date Collected to the Materials Request header record
+        const dateCollected = document.getElementById('wf-dateColl').value;
+        if (dateCollected) {
+          await atUpdate(TBL.materialsRequest, wfFoundRecId, {
+            [FLD.mr_dateColl]: dateCollected,
+          });
+          console.log('✅ Date Collected written:', dateCollected);
+        }
+
         showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s).`);
       } else {
         // === NEW MATERIALS REQUEST ===
@@ -1264,14 +1265,54 @@ let wfFoundRecId = null;
         // === CREATE LINE ITEMS (using Field IDs for safety) ===
         console.log('Creating', reqItems.length, 'line items for request', mainRequestId);
         
+        // Get location name for WSR lookup
+        const wfLocOpt2    = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
+        const wfLocName    = wfLocOpt2?.dataset?.location || '';
+
         for (const item of reqItems) {
           try {
             const lineRecord = await atCreate(TBL.materialsRequestLines, {
-              'fldzjlylKhSe8mWD2': [mainRequestId],   // Request
-              'fldM7zHq6l40DxJPR': [item.recId],      // Material
-              'fldkbdMJjKvi2sp8X': item.qty           // Qty Requested
+              'fldzjlylKhSe8mWD2': [mainRequestId],
+              'fldM7zHq6l40DxJPR': [item.recId],
+              'fldkbdMJjKvi2sp8X': item.qty
             });
             console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
+
+            // Find or create WSR row and link this line to it (both Requested + Collected links)
+            const wfMatRec = CACHE.materials.find(r => r.id === item.recId);
+            const wfBinId  = wfMatRec?.fields?.['Bin ID'] || '';
+            try {
+              const wfWsrRows = await atFetchAll(TBL.warehouseStockReport, {
+                filterByFormula: `AND(FIND("${wfLocName}",ARRAYJOIN({Warehouse Location})),FIND("${wfBinId}",ARRAYJOIN({Bin ID})))`,
+                fields: ['Report Key', 'Materials Request Lines', 'Materials Request Lines (Requested)'],
+              });
+              let wfWsrId = null;
+              if (wfWsrRows.length > 0) {
+                wfWsrId = wfWsrRows[0].id;
+                // Append this line to both WSR link fields
+                const existingColl = wfWsrRows[0].fields['Materials Request Lines'] || [];
+                const existingReq  = wfWsrRows[0].fields['Materials Request Lines (Requested)'] || [];
+                await atUpdate(TBL.warehouseStockReport, wfWsrId, {
+                  'fldyvmOr9Osm0wZ1U': [...existingColl, lineRecord.id],
+                  'fldNbMU9i8X0wfFV2': [...existingReq,  lineRecord.id],
+                });
+                console.log(`✅ Linked line ${lineRecord.id} to WSR row ${wfWsrId}`);
+              } else {
+                // Create WSR row — linking will happen via the back-link automatically
+                const newWfWsr = await atCreate(TBL.warehouseStockReport, {
+                  [FLD.wsr_warehouse]: [locRecId],
+                  [FLD.wsr_material]:  [item.recId],
+                });
+                wfWsrId = newWfWsr.id;
+                await atUpdate(TBL.warehouseStockReport, wfWsrId, {
+                  'fldyvmOr9Osm0wZ1U': [lineRecord.id],
+                  'fldNbMU9i8X0wfFV2': [lineRecord.id],
+                });
+                console.log(`Created WSR row ${wfWsrId} and linked line ${lineRecord.id}`);
+              }
+            } catch(wsrErr2) {
+              console.warn('WSR link for request line failed:', wsrErr2.message);
+            }
           } catch (err) {
             console.error(`❌ Failed to create line item for ${item.recId}:`, err.message);
           }
