@@ -457,6 +457,8 @@ const TBL = {
   materialsUsed:         'tblgfw9MvYDAtZEHz',
   materialsUsedLines:    'tblxktgCxv6few93n',
   bog:                   'tblSl6LaXIAphgQeC',
+  inventoryReceivedLines: 'tbl7TWY76NCCBlgYQ',
+  warehouseStockReport:   'tblV19fiS3avp7WSg',
 };
 
 // Field IDs for key write fields
@@ -497,6 +499,15 @@ const FLD = {
   inv_whLoc:    'fldogFgq6mj1mSUzu',
   inv_docket:   'fld5PxbxpaWx8vwpe',
   inv_lineCount:'fldP5Ut8Cx8NPwMy0',
+  // Inventory Received Lines write fields
+  irl_receipt:  'fldC0bYpvOmq2lI4p',   // Link to Inventory Received
+  irl_material: 'fldwidUBYyH1NfsP4',   // Link to Materials Quantities
+  irl_qty:      'fld9AfCPL8LSjbFSF',   // Qty Received
+  irl_wsr:      'fldshdAXfoa9465yp',   // Link to Warehouse Stock Report
+  // Warehouse Stock Report write fields
+  wsr_warehouse:'fldu6sknxKulEFMP7',   // Link to Warehouses
+  wsr_material: 'fldVKATUzvdbV6brN',   // Link to Materials Quantities
+  wsr_invLines: 'fldStBwM11BRt5srL',   // Link to Inventory Received Lines
   inv_manager:  'fld8PSTgb3CAO4MHs',
   // Materials Request write fields
   mr_company:   'fldsy6zyY5qkRFQCB',
@@ -1025,22 +1036,60 @@ function goBack() {
         if (qty > 0) lineItems.push({ recId: inp.dataset.record, qty, field: inp.dataset.field, stock: parseInt(inp.dataset.stock)||0 });
       });
 
-      // Create Inventory Received record — link to Warehouse record for state AND location
-      await atCreate(TBL.inventory, {
+      // ── Step A: Create the Inventory Received header record ──────────────
+      const invRecord = await atCreate(TBL.inventory, {
         [FLD.inv_date]:      document.getElementById('inv-date').value,
-        [FLD.inv_whState]:   [locRecId],   // Links to Warehouses (state lookup)
-        [FLD.inv_whLoc]:     [locRecId],   // Links to Warehouses (location lookup)
+        [FLD.inv_whState]:   [locRecId],
+        [FLD.inv_whLoc]:     [locRecId],
         [FLD.inv_docket]:    document.getElementById('inv-docket').value,
         [FLD.inv_lineCount]: lineItems.length,
-        [FLD.inv_manager]:   [locRecId]    // Links to Warehouses (name lookup)
+        [FLD.inv_manager]:   [locRecId],
       });
+      const invRecordId = invRecord.id;
 
-      // Update stock in Materials Quantities
+      // ── Step B: For each line item, find or create the Warehouse Stock
+      //           Report row, then create the Inventory Received Line ────────
       for (const item of lineItems) {
+
+        // B1: Update stock on-hand in Materials Quantities (existing behaviour)
         await atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: item.stock + item.qty });
-        // Update cache
         const cached = CACHE.materials.find(r => r.id === item.recId);
         if (cached) cached.fields[item.field] = item.stock + item.qty;
+
+        // B2: Find matching Warehouse Stock Report row (same warehouse + material)
+        let wsrRecordId = null;
+        try {
+          const wsrSearch = await atFetchAll(TBL.warehouseStockReport, {
+            filterByFormula: `AND(
+              FIND("${locRecId}", ARRAYJOIN({Warehouse})),
+              FIND("${item.recId}", ARRAYJOIN({Material}))
+            )`,
+            fields: ['Report Key'],
+          });
+          if (wsrSearch.length > 0) {
+            wsrRecordId = wsrSearch[0].id;
+          } else {
+            // Row doesn't exist yet — create it automatically
+            const newWsr = await atCreate(TBL.warehouseStockReport, {
+              [FLD.wsr_warehouse]: [locRecId],
+              [FLD.wsr_material]:  [item.recId],
+            });
+            wsrRecordId = newWsr.id;
+            console.log(`Created new Warehouse Stock Report row for ${locRecId} + ${item.recId}`);
+          }
+        } catch(wsrErr) {
+          console.warn('Could not find/create WSR row:', wsrErr.message);
+        }
+
+        // B3: Create the Inventory Received Line record
+        const irlFields = {
+          [FLD.irl_receipt]:  [invRecordId],
+          [FLD.irl_material]: [item.recId],
+          [FLD.irl_qty]:      item.qty,
+        };
+        if (wsrRecordId) irlFields[FLD.irl_wsr] = [wsrRecordId];
+        await atCreate(TBL.inventoryReceivedLines, irlFields);
+        console.log(`✅ Inventory line created: material ${item.recId}, qty ${item.qty}`);
       }
 
       showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated.`);
