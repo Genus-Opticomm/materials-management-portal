@@ -30,9 +30,9 @@
     @media(max-width:768px){ header{height:220px} .header-logo{height:180px} }
     .container { max-width: 1100px; margin: -50px auto 60px; padding: 2rem; background: white; border-radius: 1rem; box-shadow: 0 0 20px var(--dark-10); }
     /* NAV */
-    .form-switcher { margin-bottom: 2rem; }
+    .form-switcher { margin-bottom: 2rem; text-align:center; }
     .form-switcher h2 { font-weight:600; font-size:1.1rem; margin-bottom:.75rem; }
-    .nav-buttons { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .nav-buttons { display:flex; flex-wrap:wrap; gap:.5rem; justify-content:center; }
     .nav-btn { background:var(--accent-60); border:none; color:white; font-family:'Exo',sans-serif; font-weight:600; font-size:.9rem; padding:.75rem 1.5rem; border-radius:.5rem; cursor:pointer; transition:background .3s; }
     .nav-btn:hover, .nav-btn.active { background:var(--primary-accent); }
     /* PANELS */
@@ -109,6 +109,7 @@
     .search-status.error { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; }
     /* VALIDATION */
     .field-error input, .field-error select, .field-error textarea { border-color:var(--danger) !important; background:#fff5f5 !important; }
+    .field-error #dm-jobcode-wrap { border-color:var(--danger) !important; background:#fff5f5 !important; }
     .field-error label { color:var(--danger); }
     /* FOOTER */
     .form-footer { display:flex; justify-content:space-between; align-items:center; margin-top:2rem; flex-wrap:wrap; gap:.75rem; }
@@ -283,8 +284,13 @@
             <input type="text" id="dm-mobile" readonly />
           </div>
           <div class="field-group" id="dmgrp-jobcode">
-            <label for="dm-jobcode">Job Code <span class="req">*</span></label>
-            <input type="text" id="dm-jobcode" placeholder="Enter project ID" required />
+            <label for="dm-jobcode-suffix">Job Code <span class="req">*</span></label>
+            <div style="display:flex;align-items:center;border:1px solid var(--dark-20);border-radius:.5rem;overflow:hidden;background:white;transition:border-color .2s;" id="dm-jobcode-wrap">
+              <span id="dm-jobcode-prefix" style="padding:.75rem .5rem .75rem .75rem;color:var(--primary-mid);font-size:1rem;font-family:'Exo',sans-serif;white-space:nowrap;user-select:none;flex-shrink:0;">OAT000000</span>
+              <input type="text" id="dm-jobcode-suffix" placeholder="000000" maxlength="6" inputmode="numeric" required
+                style="border:none;outline:none;padding:.75rem .75rem .75rem 0;font-size:1rem;font-family:'Exo',sans-serif;color:var(--primary-dark);background:transparent;width:100%;box-shadow:none;" />
+            </div>
+            <input type="hidden" id="dm-jobcode" />
           </div>
           <div class="field-group" id="dmgrp-date">
             <label for="dm-date">Date of Materials Installed <span class="req">*</span></label>
@@ -967,6 +973,7 @@ function goBack() {
     document.getElementById('formDaily').reset();
     document.getElementById('dm-date').value = todayStr();
     document.getElementById('dm-jobcode').value = '';
+    document.getElementById('dm-jobcode-suffix').value = '';
     buildCompanyDropdown(document.getElementById('dm-company'));
     buildRepDropdown(document.getElementById('dm-rep'), '', document.getElementById('dm-email'), document.getElementById('dm-mobile'));
     document.getElementById('dm-subsections').innerHTML = '';
@@ -1090,7 +1097,7 @@ function goBack() {
         console.log(`✅ Inventory line: Bin ${binId}, qty ${item.qty}`);
       }
 
-      showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated.`);
+      showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
       this.reset();
       document.getElementById('inv-date').value = todayStr();
       buildStateDropdown(stateEl);
@@ -1098,6 +1105,7 @@ function goBack() {
       mgrEl.value = '';
       document.getElementById('inv-subsections').innerHTML = '';
       notice.style.display = 'block';
+      setTimeout(() => goBack(), 3000);
     } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
     finally { btnReset(btn, 'Submit'); }
   });
@@ -1237,7 +1245,7 @@ let wfFoundRecId = null;
           console.log('✅ Date Collected written:', dateCollected);
         }
 
-        showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s).`);
+        showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
       } else {
         // === NEW MATERIALS REQUEST ===
         const reqItems = [];
@@ -1339,7 +1347,7 @@ let wfFoundRecId = null;
           matRec.fields[stockField] = newStock;
         }
 
-        showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items).`);
+        showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items). Returning to home screen…`);
       }
 
       // Reset
@@ -1355,6 +1363,7 @@ let wfFoundRecId = null;
       notice.style.display = 'block';
       btn.textContent = 'Submit Request';
       wfUnlockFields();
+      setTimeout(() => goBack(), 3000);
     } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
     finally { btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); }
   });
@@ -1532,6 +1541,32 @@ const WF_LOCK = ['wf-company','wf-rep','wf-state','wf-location','wf-dateReq'];
 function wfLockFields()   { WF_LOCK.forEach(id => { const el=document.getElementById(id); if(el) el.disabled=true; }); }
 function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElementById(id); if(el) el.disabled=false; }); }
 
+// ── Job Code prefix logic ────────────────────────────
+(function() {
+  const suffix = document.getElementById('dm-jobcode-suffix');
+  const hidden = document.getElementById('dm-jobcode');
+  const wrap   = document.getElementById('dm-jobcode-wrap');
+  const PREFIX = 'OAT000000';
+
+  function sync() {
+    hidden.value = suffix.value.trim() ? PREFIX + suffix.value.trim() : '';
+  }
+  suffix.addEventListener('input', function() {
+    // Only allow digits/alphanumeric, max 6 chars
+    this.value = this.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 6);
+    sync();
+  });
+  suffix.addEventListener('focus', () => {
+    wrap.style.borderColor = 'var(--primary-accent)';
+    wrap.style.boxShadow = '0 0 0 3px var(--accent-10)';
+  });
+  suffix.addEventListener('blur', () => {
+    wrap.style.borderColor = 'var(--dark-20)';
+    wrap.style.boxShadow = '';
+  });
+})();
+
+// ── Daily Materials Used form listeners ────────────
 // ═══════════════════════════════════════════════════
 //  DAILY MATERIALS USED
 // ═══════════════════════════════════════════════════
@@ -1586,13 +1621,14 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       });
 
       // 1. Create the main Daily Materials Used record
+      const fullJobCode = document.getElementById('dm-jobcode').value.trim();
       const newUsedRecord = await atCreate(TBL.materialsUsed, {
         [FLD.mu_company]:   [repRecId],   // Links to Representatives, not Subcontractors
         [FLD.mu_rep]:       [repRecId],
         [FLD.mu_email]:     [repRecId],
         [FLD.mu_mobile]:    [repRecId],
         [FLD.mu_date]:      document.getElementById('dm-date').value,
-        'Job Code':         document.getElementById('dm-jobcode').value.trim(),
+        'Job Code':         fullJobCode,
         [FLD.mu_lineCount]: usedItems.length,
       });
 
@@ -1600,31 +1636,94 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
 
       // 2. Create Line Items (using Field IDs for reliability)
       console.log(`Creating ${usedItems.length} usage line items...`);
-      
+      const createdUsedLineIds = [];
       for (const item of usedItems) {
         try {
-          await atCreate(TBL.materialsUsedLines, {
+          const usedLine = await atCreate(TBL.materialsUsedLines, {
             'fldbEHOSuv028hMjD': [mainUsedId],                                   // "Used" field
             'fld0u8aUHdRsSIJLm': [item.recId],                                   // "Material" field
             'fldGV26CqV55FYGv6': item.qty,                                        // "Qty Used" field
             'flduIFkorq5wVuNNz': document.getElementById('dm-date').value,        // "Date Used" field
           });
+          createdUsedLineIds.push({ lineId: usedLine.id, recId: item.recId });
           console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
         } catch (lineErr) {
           console.error(`Failed to create line item for ${item.recId}:`, lineErr);
         }
       }
 
-      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items).`);
+      // 3. Write to Subcontractor Stock Report (one record per rep+material combo)
+      for (const item of createdUsedLineIds) {
+        try {
+          const matRec = CACHE.materials.find(r => r.id === item.recId);
+          const repName = document.getElementById('dm-rep').options[document.getElementById('dm-rep').selectedIndex]?.textContent?.trim() || '';
+          // Find existing SSR record for this rep + material
+          const ssrRows = await atFetchAll('tblAkiFxWxDYV2Alm', {
+            filterByFormula: `AND(FIND("${repName}",ARRAYJOIN({Full Name (from Representative)})),{Material}="${item.recId}")`,
+            fields: ['Report Key','Materials Used Lines'],
+          });
+          if (ssrRows.length > 0) {
+            // Append this used line to existing SSR record
+            const existing = ssrRows[0].fields['Materials Used Lines'] || [];
+            await atUpdate('tblAkiFxWxDYV2Alm', ssrRows[0].id, {
+              'fldMRWnZGCcrciOGV': [...existing, item.lineId],
+            });
+            console.log(`✅ Updated SSR row for ${repName} + material ${item.recId}`);
+          } else {
+            // Create new SSR record
+            await atCreate('tblAkiFxWxDYV2Alm', {
+              'fldV1yEmErUzd4oFw': [repRecId],
+              'fldXm5gW03QOzBE1P': [item.recId],
+              'fldMRWnZGCcrciOGV': [item.lineId],
+            });
+            console.log(`✅ Created SSR row for ${repName} + material ${item.recId}`);
+          }
+        } catch (ssrErr) {
+          console.warn('SSR write failed:', ssrErr.message);
+        }
+      }
+
+      // 4. Write to Subcontractor Job Report (one record per job code)
+      try {
+        const repName = document.getElementById('dm-rep').options[document.getElementById('dm-rep').selectedIndex]?.textContent?.trim() || '';
+        const sjrRows = await atFetchAll('tbl5pCmx7a4tpNCNk', {
+          filterByFormula: `{Report Key}="${fullJobCode}"`,
+          fields: ['Report Key','Materials Used Lines'],
+        });
+        const allUsedLineIds = createdUsedLineIds.map(x => x.lineId);
+        if (sjrRows.length > 0) {
+          const existing = sjrRows[0].fields['Materials Used Lines'] || [];
+          await atUpdate('tbl5pCmx7a4tpNCNk', sjrRows[0].id, {
+            'fldmzlT6wP9GqmY1Y': [...existing, ...allUsedLineIds],
+          });
+          console.log(`✅ Updated SJR for job ${fullJobCode}`);
+        } else {
+          await atCreate('tbl5pCmx7a4tpNCNk', {
+            'fldXkqr0dATTrcdzV': fullJobCode,
+            'fldx95iGCFWwEerUG': [repRecId],
+            'fld0hTtMsA85SogbB': createdUsedLineIds.length > 0 ? [createdUsedLineIds[0].recId] : [],
+            'fldm4IyWoBm3nc2FS': [mainUsedId],
+            'fldmzlT6wP9GqmY1Y': allUsedLineIds,
+          });
+          console.log(`✅ Created SJR for job ${fullJobCode}`);
+        }
+      } catch (sjrErr) {
+        console.warn('SJR write failed:', sjrErr.message);
+      }
+
+      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
       
       // Reset form
       this.reset();
       document.getElementById('dm-date').value = todayStr();
       document.getElementById('dm-jobcode').value = '';
+      document.getElementById('dm-jobcode-suffix').value = '';
       buildCompanyDropdown(compEl);
       buildRepDropdown(repEl, '', emailEl, mobileEl);
       document.getElementById('dm-subsections').innerHTML = '';
       notice.style.display = 'block';
+
+      setTimeout(() => goBack(), 3000);
 
     } catch(err) { 
       alert('Submission failed: ' + err.message); 
