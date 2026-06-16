@@ -1653,14 +1653,13 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       }
 
       // 3. Write to Subcontractor Stock Report (one record per rep+material combo)
+      const repName = document.getElementById('dm-rep').options[document.getElementById('dm-rep').selectedIndex]?.textContent?.trim() || '';
       for (const item of createdUsedLineIds) {
         try {
-          const matRec = CACHE.materials.find(r => r.id === item.recId);
-          const repName = document.getElementById('dm-rep').options[document.getElementById('dm-rep').selectedIndex]?.textContent?.trim() || '';
-          // Find existing SSR record for this rep + material
+          // Look up existing SSR record by filtering on the rep name (lookup field) + material record ID (FIND on linked IDs)
           const ssrRows = await atFetchAll('tblAkiFxWxDYV2Alm', {
-            filterByFormula: `AND(FIND("${repName}",ARRAYJOIN({Full Name (from Representative)})),{Material}="${item.recId}")`,
-            fields: ['Report Key','Materials Used Lines'],
+            filterByFormula: `AND(FIND("${repName}",ARRAYJOIN({Full Name (from Representative)},",")),FIND("${item.recId}",ARRAYJOIN({Material},",")))`,
+            fields: ['Report Key', 'Materials Used Lines'],
           });
           if (ssrRows.length > 0) {
             // Append this used line to existing SSR record
@@ -1668,45 +1667,32 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
             await atUpdate('tblAkiFxWxDYV2Alm', ssrRows[0].id, {
               'fldMRWnZGCcrciOGV': [...existing, item.lineId],
             });
-            console.log(`✅ Updated SSR row for ${repName} + material ${item.recId}`);
+            console.log(`✅ Updated SSR row for ${repName} + ${item.recId}`);
           } else {
-            // Create new SSR record
+            // Create new SSR record — one per rep+material
             await atCreate('tblAkiFxWxDYV2Alm', {
               'fldV1yEmErUzd4oFw': [repRecId],
               'fldXm5gW03QOzBE1P': [item.recId],
               'fldMRWnZGCcrciOGV': [item.lineId],
             });
-            console.log(`✅ Created SSR row for ${repName} + material ${item.recId}`);
+            console.log(`✅ Created SSR row for ${repName} + ${item.recId}`);
           }
         } catch (ssrErr) {
           console.warn('SSR write failed:', ssrErr.message);
         }
       }
 
-      // 4. Write to Subcontractor Job Report (one record per job code)
+      // 4. Write to Subcontractor Job Report (one record per submission)
       try {
-        const repName = document.getElementById('dm-rep').options[document.getElementById('dm-rep').selectedIndex]?.textContent?.trim() || '';
-        const sjrRows = await atFetchAll('tbl5pCmx7a4tpNCNk', {
-          filterByFormula: `{Report Key}="${fullJobCode}"`,
-          fields: ['Report Key','Materials Used Lines'],
-        });
         const allUsedLineIds = createdUsedLineIds.map(x => x.lineId);
-        if (sjrRows.length > 0) {
-          const existing = sjrRows[0].fields['Materials Used Lines'] || [];
-          await atUpdate('tbl5pCmx7a4tpNCNk', sjrRows[0].id, {
-            'fldmzlT6wP9GqmY1Y': [...existing, ...allUsedLineIds],
-          });
-          console.log(`✅ Updated SJR for job ${fullJobCode}`);
-        } else {
-          await atCreate('tbl5pCmx7a4tpNCNk', {
-            'fldXkqr0dATTrcdzV': fullJobCode,
-            'fldx95iGCFWwEerUG': [repRecId],
-            'fld0hTtMsA85SogbB': createdUsedLineIds.length > 0 ? [createdUsedLineIds[0].recId] : [],
-            'fldm4IyWoBm3nc2FS': [mainUsedId],
-            'fldmzlT6wP9GqmY1Y': allUsedLineIds,
-          });
-          console.log(`✅ Created SJR for job ${fullJobCode}`);
-        }
+        const allMatIds = [...new Set(createdUsedLineIds.map(x => x.recId))];
+        await atCreate('tbl5pCmx7a4tpNCNk', {
+          'fldx95iGCFWwEerUG': [repRecId],
+          'fld0hTtMsA85SogbB': allMatIds,
+          'fldm4IyWoBm3nc2FS': [mainUsedId],
+          'fldmzlT6wP9GqmY1Y': allUsedLineIds,
+        });
+        console.log(`✅ Created SJR for job ${fullJobCode}`);
       } catch (sjrErr) {
         console.warn('SJR write failed:', sjrErr.message);
       }
