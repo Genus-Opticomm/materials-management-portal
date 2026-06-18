@@ -1465,6 +1465,9 @@ async function wfSearch() {
     const rec = recs[0]; 
     wfFoundRecId = rec.id; 
     wfMode = 'receive';
+
+    // Auto-populate Date Collected with today's date
+    document.getElementById('wf-dateColl').value = todayStr();
     const f = rec.fields;
 
     // Populate header fields
@@ -1665,7 +1668,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
             // Append this used line to existing SSR record
             const existing = ssrRows[0].fields['Materials Used Lines'] || [];
             await atUpdate('tblAkiFxWxDYV2Alm', ssrRows[0].id, {
-              'fldMRWnZGCcrciOGV': [...existing, item.lineId],
+              'fldozoAjUrm312vj9': [...existing, item.lineId],
             });
             console.log(`✅ Updated SSR row for ${repName} + ${item.recId}`);
           } else {
@@ -1673,7 +1676,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
             await atCreate('tblAkiFxWxDYV2Alm', {
               'fldV1yEmErUzd4oFw': [repRecId],
               'fldXm5gW03QOzBE1P': [item.recId],
-              'fldMRWnZGCcrciOGV': [item.lineId],
+              'fldozoAjUrm312vj9': [item.lineId],
             });
             console.log(`✅ Created SSR row for ${repName} + ${item.recId}`);
           }
