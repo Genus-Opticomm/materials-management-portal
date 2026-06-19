@@ -1680,21 +1680,32 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         try {
           // Use POST /listRecords for reliable filtering — GET filterByFormula
           // fails silently on lookup fields like Rep Record ID (from Representative)
-          const ssrRows = await atListRecords('tblAkiFxWxDYV2Alm', {
-            filterByFormula: 'AND(FIND("' + repRecId + '",ARRAYJOIN({Representative},",")),FIND("' + item.recId + '",ARRAYJOIN({Material},",")))',
-            fields: ['fldozoAjUrm312vj9'],
+          // Fetch all SSR records and match client-side.
+          // Airtable formula ARRAYJOIN on linked fields returns display names not IDs,
+          // so server-side filterByFormula cannot match by record ID reliably.
+          const allSsrRows = await atListRecords('tblAkiFxWxDYV2Alm', {
+            fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
             returnFieldsByFieldId: true,
           });
-          console.log('SSR lookup rep=' + repRecId + ' mat=' + item.recId + ': found ' + ssrRows.length + ' row(s)');
-          if (ssrRows.length > 0) {
-            // Found existing SSR row — append this MUL, avoiding duplicates
-            const existingRaw = ssrRows[0].fields['fldozoAjUrm312vj9'] || [];
-            const existingIds = existingRaw.map(function(r) { return (r && typeof r === 'object') ? r.id : r; });
+          // Match: rep record ID in lookup array AND material record ID in linked array
+          const ssrMatch = allSsrRows.find(function(row) {
+            const repIds = row.fields['fldTqTbr6ysQAimLX'] || [];
+            const matIds = (row.fields['fldXm5gW03QOzBE1P'] || []).map(function(r) { return r.id || r; });
+            const repMatch = repIds.some(function(v) { return (v && (v.id || v)) === repRecId; }) ||
+                             repIds.includes(repRecId);
+            const matMatch = matIds.includes(item.recId);
+            return repMatch && matMatch;
+          });
+          console.log('SSR lookup rep=' + repRecId + ' mat=' + item.recId + ': ' + (ssrMatch ? 'FOUND ' + ssrMatch.id : 'not found'));
+          if (ssrMatch) {
+            // Append this MUL to existing SSR row, avoiding duplicates
+            const existingRaw = ssrMatch.fields['fldozoAjUrm312vj9'] || [];
+            const existingIds = existingRaw.map(function(r) { return (r && r.id) ? r.id : r; });
             if (!existingIds.includes(item.lineId)) existingIds.push(item.lineId);
-            await atUpdate('tblAkiFxWxDYV2Alm', ssrRows[0].id, {
+            await atUpdate('tblAkiFxWxDYV2Alm', ssrMatch.id, {
               'fldozoAjUrm312vj9': existingIds.map(function(id) { return { id: id }; }),
             });
-            console.log('Updated SSR row for ' + repName + ' + ' + item.recId);
+            console.log('Updated SSR ' + ssrMatch.id + ' for ' + repName + ' + ' + item.recId);
           } else {
             // No existing SSR row — create one
             await atCreate('tblAkiFxWxDYV2Alm', {
