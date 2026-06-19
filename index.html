@@ -1681,26 +1681,28 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
           // Use POST /listRecords for reliable filtering — GET filterByFormula
           // fails silently on lookup fields like Rep Record ID (from Representative)
           const ssrRows = await atListRecords('tblAkiFxWxDYV2Alm', {
-            filterByFormula: `AND(FIND("${repRecId}",ARRAYJOIN({Rep Record ID (from Representative)},",")),FIND("${item.recId}",ARRAYJOIN({Material},",")))`,
+            filterByFormula: 'AND(FIND("' + repRecId + '",ARRAYJOIN({Representative},",")),FIND("' + item.recId + '",ARRAYJOIN({Material},",")))',
             fields: ['fldozoAjUrm312vj9'],
+            returnFieldsByFieldId: true,
           });
+          console.log('SSR lookup rep=' + repRecId + ' mat=' + item.recId + ': found ' + ssrRows.length + ' row(s)');
           if (ssrRows.length > 0) {
-            // Append this used line to existing SSR record
+            // Found existing SSR row — append this MUL, avoiding duplicates
             const existingRaw = ssrRows[0].fields['fldozoAjUrm312vj9'] || [];
-            const existingIds = existingRaw.map(r => typeof r === 'object' ? r.id : r);
+            const existingIds = existingRaw.map(function(r) { return (r && typeof r === 'object') ? r.id : r; });
             if (!existingIds.includes(item.lineId)) existingIds.push(item.lineId);
             await atUpdate('tblAkiFxWxDYV2Alm', ssrRows[0].id, {
-              'fldozoAjUrm312vj9': existingIds.map(id => ({ id })),
+              'fldozoAjUrm312vj9': existingIds.map(function(id) { return { id: id }; }),
             });
-            console.log(`✅ Updated SSR row for ${repName} + ${item.recId}`);
+            console.log('Updated SSR row for ' + repName + ' + ' + item.recId);
           } else {
-            // No existing SSR — create one (rare: MRL automation should have created it)
+            // No existing SSR row — create one
             await atCreate('tblAkiFxWxDYV2Alm', {
               'fldV1yEmErUzd4oFw': [repRecId],
               'fldXm5gW03QOzBE1P': [item.recId],
               'fldozoAjUrm312vj9': [item.lineId],
             });
-            console.log(`✅ Created new SSR row for ${repName} + ${item.recId}`);
+            console.log('Created new SSR row for ' + repName + ' + ' + item.recId);
           }
         } catch (ssrErr) {
           console.warn('SSR write failed:', ssrErr.message);
