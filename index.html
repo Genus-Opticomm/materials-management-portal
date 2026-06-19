@@ -1661,7 +1661,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         try {
           // Look up existing SSR record by filtering on the rep name (lookup field) + material record ID (FIND on linked IDs)
           const ssrRows = await atFetchAll('tblAkiFxWxDYV2Alm', {
-            filterByFormula: `AND(FIND("${repName}",ARRAYJOIN({Full Name (from Representative)},",")),FIND("${item.recId}",ARRAYJOIN({Material},",")))`,
+            filterByFormula: `AND(FIND("${repRecId}",ARRAYJOIN({Rep Record ID (from Representative)},",")),FIND("${item.recId}",ARRAYJOIN({Material},",")))`,
             fields: ['Report Key', 'Materials Used Lines'],
           });
           if (ssrRows.length > 0) {
@@ -1732,7 +1732,7 @@ async function loadRepInventory(repRecId, repName) {
     // Filter by rep name via the lookup field — FIND on linked record ID fields
     // always returns empty in Airtable API (confirmed by console testing).
     const requests = await atFetchAll(TBL.materialsRequest, {
-      filterByFormula: `FIND("${repName}",ARRAYJOIN({Full Name (from Company Representative Name)}))`,
+      filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Rep Record ID (from Company Representative Name)}))`,
       fields: ['Request ID', 'Materials Request Lines'],
     });
     console.log(`Found ${requests.length} request(s) for ${repName}`);
@@ -1765,7 +1765,7 @@ async function loadRepInventory(repRecId, repName) {
 
     // ── Step 4: Find all Materials Used header records for this rep ─────────────
     const usedHeaders = await atFetchAll(TBL.materialsUsed, {
-      filterByFormula: `FIND("${repName}",ARRAYJOIN({Full Name (from Company Representative Name)}))`,
+      filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Rep Record ID (from Company Representative Name)}))`,
       fields: ['Materials Used Lines 2'],
     });
     console.log(`Found ${usedHeaders.length} used header(s) for ${repName}`);
