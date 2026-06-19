@@ -587,6 +587,25 @@ async function atCreate(tableId, fields) {
   return res.json();
 }
 
+async function atListRecords(tableId, body) {
+  const url = `${AT_API}/${AT_BASE}/${tableId}/listRecords`;
+  let records = [], offset = null;
+  do {
+    const payload = { ...body };
+    if (offset) payload.offset = offset;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`AT listRecords ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    records = records.concat(data.records || []);
+    offset = data.offset || null;
+  } while (offset);
+  return records;
+}
+
 async function atUpdate(tableId, recordId, fields) {
   const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}/${recordId}`, {
     method: 'PATCH',
@@ -1659,14 +1678,15 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       const repName = document.getElementById('dm-rep').options[document.getElementById('dm-rep').selectedIndex]?.textContent?.trim() || '';
       for (const item of createdUsedLineIds) {
         try {
-          // Look up existing SSR record by filtering on the rep name (lookup field) + material record ID (FIND on linked IDs)
-          const ssrRows = await atFetchAll('tblAkiFxWxDYV2Alm', {
+          // Use POST /listRecords for reliable filtering — GET filterByFormula
+          // fails silently on lookup fields like Rep Record ID (from Representative)
+          const ssrRows = await atListRecords('tblAkiFxWxDYV2Alm', {
             filterByFormula: `AND(FIND("${repRecId}",ARRAYJOIN({Rep Record ID (from Representative)},",")),FIND("${item.recId}",ARRAYJOIN({Material},",")))`,
-            fields: ['Report Key', 'Materials Used Lines'],
+            fields: ['fldozoAjUrm312vj9'],
           });
           if (ssrRows.length > 0) {
             // Append this used line to existing SSR record
-            const existingRaw = ssrRows[0].fields['Materials Used Lines'] || [];
+            const existingRaw = ssrRows[0].fields['fldozoAjUrm312vj9'] || [];
             const existingIds = existingRaw.map(r => typeof r === 'object' ? r.id : r);
             if (!existingIds.includes(item.lineId)) existingIds.push(item.lineId);
             await atUpdate('tblAkiFxWxDYV2Alm', ssrRows[0].id, {
@@ -1674,13 +1694,13 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
             });
             console.log(`✅ Updated SSR row for ${repName} + ${item.recId}`);
           } else {
-            // Create new SSR record — one per rep+material
+            // No existing SSR — create one (rare: MRL automation should have created it)
             await atCreate('tblAkiFxWxDYV2Alm', {
-              'fldV1yEmErUzd4oFw': [repRecId],
-              'fldXm5gW03QOzBE1P': [item.recId],
-              'fldozoAjUrm312vj9': [item.lineId],
+              'fldV1yEmErUzd4oFw': [{ id: repRecId }],
+              'fldXm5gW03QOzBE1P': [{ id: item.recId }],
+              'fldozoAjUrm312vj9': [{ id: item.lineId }],
             });
-            console.log(`✅ Created SSR row for ${repName} + ${item.recId}`);
+            console.log(`✅ Created new SSR row for ${repName} + ${item.recId}`);
           }
         } catch (ssrErr) {
           console.warn('SSR write failed:', ssrErr.message);
