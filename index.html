@@ -1681,29 +1681,24 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
           // Use POST /listRecords for reliable filtering — GET filterByFormula
           // fails silently on lookup fields like Rep Record ID (from Representative)
           // Fetch all SSR records and match client-side.
-          // Airtable formula ARRAYJOIN on linked fields returns display names not IDs,
-          // so server-side filterByFormula cannot match by record ID reliably.
+          // (Airtable filterByFormula cannot match linked field record IDs via ARRAYJOIN)
           const allSsrRows = await atListRecords('tblAkiFxWxDYV2Alm', {
             fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
             returnFieldsByFieldId: true,
           });
-          // Match: rep record ID in lookup array AND material record ID in linked array
           const ssrMatch = allSsrRows.find(function(row) {
-            const repIds = row.fields['fldTqTbr6ysQAimLX'] || [];
-            const matIds = (row.fields['fldXm5gW03QOzBE1P'] || []).map(function(r) { return r.id || r; });
-            const repMatch = repIds.some(function(v) { return (v && (v.id || v)) === repRecId; }) ||
-                             repIds.includes(repRecId);
-            const matMatch = matIds.includes(item.recId);
-            return repMatch && matMatch;
+            const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
+            const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(function(r) { return r && r.id ? r.id : r; });
+            return repLookup.includes(repRecId) && matLinked.includes(item.recId);
           });
           console.log('SSR lookup rep=' + repRecId + ' mat=' + item.recId + ': ' + (ssrMatch ? 'FOUND ' + ssrMatch.id : 'not found'));
           if (ssrMatch) {
-            // Append this MUL to existing SSR row, avoiding duplicates
+            // Append MUL to existing SSR row — Airtable REST API wants plain string array
             const existingRaw = ssrMatch.fields['fldozoAjUrm312vj9'] || [];
-            const existingIds = existingRaw.map(function(r) { return (r && r.id) ? r.id : r; });
+            const existingIds = existingRaw.map(function(r) { return r && r.id ? r.id : r; });
             if (!existingIds.includes(item.lineId)) existingIds.push(item.lineId);
             await atUpdate('tblAkiFxWxDYV2Alm', ssrMatch.id, {
-              'fldozoAjUrm312vj9': existingIds.map(function(id) { return { id: id }; }),
+              'fldozoAjUrm312vj9': existingIds,
             });
             console.log('Updated SSR ' + ssrMatch.id + ' for ' + repName + ' + ' + item.recId);
           } else {
