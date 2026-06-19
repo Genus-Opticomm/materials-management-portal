@@ -1666,9 +1666,11 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
           });
           if (ssrRows.length > 0) {
             // Append this used line to existing SSR record
-            const existing = ssrRows[0].fields['Materials Used Lines'] || [];
+            const existingRaw = ssrRows[0].fields['Materials Used Lines'] || [];
+            const existingIds = existingRaw.map(r => typeof r === 'object' ? r.id : r);
+            if (!existingIds.includes(item.lineId)) existingIds.push(item.lineId);
             await atUpdate('tblAkiFxWxDYV2Alm', ssrRows[0].id, {
-              'fldozoAjUrm312vj9': [...existing, item.lineId],
+              'fldozoAjUrm312vj9': existingIds.map(id => ({ id })),
             });
             console.log(`✅ Updated SSR row for ${repName} + ${item.recId}`);
           } else {
