@@ -1696,9 +1696,9 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
           } else {
             // No existing SSR — create one (rare: MRL automation should have created it)
             await atCreate('tblAkiFxWxDYV2Alm', {
-              'fldV1yEmErUzd4oFw': [{ id: repRecId }],
-              'fldXm5gW03QOzBE1P': [{ id: item.recId }],
-              'fldozoAjUrm312vj9': [{ id: item.lineId }],
+              'fldV1yEmErUzd4oFw': [repRecId],
+              'fldXm5gW03QOzBE1P': [item.recId],
+              'fldozoAjUrm312vj9': [item.lineId],
             });
             console.log(`✅ Created new SSR row for ${repName} + ${item.recId}`);
           }
