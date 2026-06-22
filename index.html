@@ -1715,19 +1715,17 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         }
       }
 
-      // 4. Write to Subcontractor Job Report (one record per submission)
-      try {
-        const allUsedLineIds = createdUsedLineIds.map(x => x.lineId);
-        const allMatIds = [...new Set(createdUsedLineIds.map(x => x.recId))];
-        await atCreate('tbl5pCmx7a4tpNCNk', {
-          'fldx95iGCFWwEerUG': [repRecId],
-          'fld0hTtMsA85SogbB': allMatIds,
-          'fldm4IyWoBm3nc2FS': [mainUsedId],
-          'fldmzlT6wP9GqmY1Y': allUsedLineIds,
-        });
-        console.log(`✅ Created SJR for job ${fullJobCode}`);
-      } catch (sjrErr) {
-        console.warn('SJR write failed:', sjrErr.message);
+      // 4. Write to Subcontractor Job Report (one record per MUL line item)
+      for (const item of createdUsedLineIds) {
+        try {
+          await atCreate('tbl5pCmx7a4tpNCNk', {
+            'fldOsnJEHcWjfe7fV': [repRecId],
+            'fldkCo5VFj09XALYv': [item.lineId],
+          });
+          console.log('Created SJR row for MUL ' + item.lineId + ' (' + item.recId + ')');
+        } catch (sjrErr) {
+          console.warn('SJR write failed for ' + item.lineId + ':', sjrErr.message);
+        }
       }
 
       showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
