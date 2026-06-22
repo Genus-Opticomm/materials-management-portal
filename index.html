@@ -1794,13 +1794,13 @@ async function loadRepInventory(repRecId, repName) {
     // ── Step 4: Find all Materials Used header records for this rep ─────────────
     const usedHeaders = await atFetchAll(TBL.materialsUsed, {
       filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Rep Record ID (from Company Representative Name)}))`,
-      fields: ['Materials Used Lines 2'],
+      fields: ['Materials Used Lines'],
     });
     console.log(`Found ${usedHeaders.length} used header(s) for ${repName}`);
 
     const usedLineIds = [];
     usedHeaders.forEach(r => {
-      (r.fields['Materials Used Lines 2'] || []).forEach(id => usedLineIds.push(id));
+      (r.fields['Materials Used Lines'] || []).forEach(id => usedLineIds.push(id));
     });
 
     // ── Step 5: Fetch each Used Line to get Material + Qty Used ─────────────────
