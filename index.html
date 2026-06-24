@@ -138,8 +138,10 @@
     <h2>Select Operation</h2>
     <div class="nav-buttons" id="navButtons">
       <button class="nav-btn" data-target="panel-inventory">Inventory Received</button>
+      <button class="nav-btn" data-target="panel-contractor-return">Contractor Stock Return</button>
       <button class="nav-btn" data-target="panel-workforce">Field Workforce Materials Request</button>
       <button class="nav-btn" data-target="panel-daily">Daily Materials Used</button>
+      <button class="nav-btn" data-target="panel-opticomm-return">OptiComm Stock Return</button>
       <!-- Boots on Ground button hidden until fields confirmed — code preserved below -->
       <!-- <button class="nav-btn" data-target="panel-bog">Boots on Ground</button> -->
     </div>
@@ -441,7 +443,92 @@
     </div>
   </div>
 
-</div><!-- /form-wrapper outer -->
+</div>
+  <!-- ══ CONTRACTOR STOCK RETURN ══ -->
+  <div class="form-panel" id="panel-contractor-return">
+    <div class="panel-title">Contractor Stock Return</div>
+    <div class="panel-subtitle">Record stock being returned from a contractor representative back to a warehouse.</div>
+    <div class="form-wrapper">
+      <div class="success-banner" id="cr-success"></div>
+      <form id="formContractorReturn" novalidate>
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group" id="crgrp-company">
+            <label for="cr-company">Company Name <span class="req">*</span></label>
+            <select id="cr-company" required><option value="">— Select Company —</option></select>
+          </div>
+          <div class="field-group" id="crgrp-rep">
+            <label for="cr-rep">Company Representative <span class="req">*</span></label>
+            <select id="cr-rep" required disabled><option value="">— Select Company First —</option></select>
+          </div>
+          <div class="field-group" id="crgrp-wh-state">
+            <label for="cr-wh-state">Return to Warehouse — State <span class="req">*</span></label>
+            <select id="cr-wh-state" required><option value="">— Select State —</option></select>
+          </div>
+          <div class="field-group" id="crgrp-wh-location">
+            <label for="cr-wh-location">Return to Warehouse — Location <span class="req">*</span></label>
+            <select id="cr-wh-location" required disabled><option value="">— Select State First —</option></select>
+          </div>
+          <div class="field-group" id="crgrp-date">
+            <label for="cr-date">Date of Return <span class="req">*</span></label>
+            <input type="date" id="cr-date" required />
+          </div>
+          <div class="field-group">
+            <label for="cr-notes">Notes <span style="font-weight:400;color:var(--dark-50)">(optional)</span></label>
+            <input type="text" id="cr-notes" placeholder="Optional notes about this return" />
+          </div>
+        </div>
+        <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Stock to Return</span><div class="divider-line"></div></div>
+        <div class="notice-box" id="cr-notice">Select a Company Representative above to load their on-hand inventory.</div>
+        <div class="subsections" id="cr-subsections"></div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <button type="submit" class="btn btn-primary" id="cr-submitBtn">Submit Return</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══ OPTICOMM STOCK RETURN ══ -->
+  <div class="form-panel" id="panel-opticomm-return">
+    <div class="panel-title">OptiComm Stock Return</div>
+    <div class="panel-subtitle">Record stock being returned from an internal warehouse back to OptiComm.</div>
+    <div class="form-wrapper">
+      <div class="success-banner" id="or-success"></div>
+      <form id="formOpticommReturn" novalidate>
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group" id="orgrp-wh-state">
+            <label for="or-wh-state">Internal Warehouse — State <span class="req">*</span></label>
+            <select id="or-wh-state" required><option value="">— Select State —</option></select>
+          </div>
+          <div class="field-group" id="orgrp-wh-location">
+            <label for="or-wh-location">Internal Warehouse — Location <span class="req">*</span></label>
+            <select id="or-wh-location" required disabled><option value="">— Select State First —</option></select>
+          </div>
+          <div class="field-group" id="orgrp-opticomm-wh">
+            <label for="or-opticomm-wh">OptiComm Return Warehouse <span class="req">*</span></label>
+            <select id="or-opticomm-wh" required><option value="">— Select OptiComm Warehouse —</option></select>
+          </div>
+          <div class="field-group" id="orgrp-date">
+            <label for="or-date">Date of Return <span class="req">*</span></label>
+            <input type="date" id="or-date" required />
+          </div>
+          <div class="field-group">
+            <label for="or-notes">Notes <span style="font-weight:400;color:var(--dark-50)">(optional)</span></label>
+            <input type="text" id="or-notes" placeholder="Optional notes about this return" />
+          </div>
+        </div>
+        <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Stock to Return</span><div class="divider-line"></div></div>
+        <div class="notice-box" id="or-notice">Select an internal warehouse above to load current stock on hand.</div>
+        <div class="subsections" id="or-subsections"></div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <button type="submit" class="btn btn-primary" id="or-submitBtn">Submit Return</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<!-- /form-wrapper outer -->
 </main>
 
 <script>
@@ -453,18 +540,22 @@ const AT_BASE  = 'appLWbPBLepjoO6F4';
 const AT_API   = 'https://api.airtable.com/v0';
 
 const TBL = {
-  warehouses:            'tblbzPycQ8I7pZzl5',
-  subcontractors:        'tblrvtTKRWDm0Agwc',
-  representatives:       'tblutA51et1wwkEVA',
-  materialsQuantities:   'tbldLNJHOmXy6MdRa',
-  inventory:             'tblZmIuHI6Uc38r45',
-  materialsRequest:      'tbl7WEVWq0DlwLhnt',
-  materialsRequestLines: 'tblWQyFIO1QTnmNbB',
-  materialsUsed:         'tblgfw9MvYDAtZEHz',
-  materialsUsedLines:    'tblxktgCxv6few93n',
-  bog:                   'tblSl6LaXIAphgQeC',
-  inventoryReceivedLines: 'tbl7TWY76NCCBlgYQ',
-  warehouseStockReport:   'tblV19fiS3avp7WSg',
+  warehouses:              'tblbzPycQ8I7pZzl5',
+  subcontractors:          'tblrvtTKRWDm0Agwc',
+  representatives:         'tblutA51et1wwkEVA',
+  materialsQuantities:     'tbldLNJHOmXy6MdRa',
+  inventory:               'tblZmIuHI6Uc38r45',
+  materialsRequest:        'tbl7WEVWq0DlwLhnt',
+  materialsRequestLines:   'tblWQyFIO1QTnmNbB',
+  materialsUsed:           'tblgfw9MvYDAtZEHz',
+  materialsUsedLines:      'tblxktgCxv6few93n',
+  bog:                     'tblSl6LaXIAphgQeC',
+  inventoryReceivedLines:  'tbl7TWY76NCCBlgYQ',
+  warehouseStockReport:    'tblV19fiS3avp7WSg',
+  contractorReturns:       'tblGb0b7p5jFolHlY',
+  opticommReturns:         'tblO2WV70EcOodGJd',
+  opticommWarehouses:      'tblNZyRwHcwMAeKfi',
+  subcontractorStockReport:'tblAkiFxWxDYV2Alm',
 };
 
 // Field IDs for key write fields
@@ -533,6 +624,28 @@ const FLD = {
   mu_mobile:    'fldMzcCEAzo92W1Wx',
   mu_date:      'fldtSi37Fokls6K4O',
   mu_lineCount: 'fldzpeGI8LCVazURo',
+  // Contractor Stock Returns
+  csr_representative: 'fldwiavGi0lJYyeJd',
+  csr_material:       'fldLp0oetAYHnVbg0',
+  csr_warehouse:      'fldIw5ogE6v79OzhY',
+  csr_qtyReturned:    'fldRw8RhxJLWCNHiJ',
+  csr_dateReturned:   'fldRQsRPRPLXpD3yb',
+  csr_notes:          'fldiQGRJSEQdJ0QLI',
+  csr_wsr:            'fldVHmBIRSChvkNnU',
+  csr_ssr:            'fldtVWXGd4NLTm33n',
+  // OptiComm Stock Returns
+  osr_warehouse:      'fldqyjauWZDlFe6sM',
+  osr_opticommWh:     'fld8rU1roxHQVZPv9',
+  osr_material:       'fldMsk6WTgTJ1AmwZ',
+  osr_qtyReturned:    'fldkyrtQMlDqJ1ibP',
+  osr_dateReturned:   'fldPNWRGXLdFoqbvk',
+  osr_notes:          'fldq8NrgtZxci3ubm',
+  osr_wsr:            'fldGGhOm8tpxORBvE',
+  // WSR return links
+  wsr_contractorReturns: 'fldrJuhhgjIWviWmW',
+  wsr_providerReturns:   'fldV5szFTHZsmgSVy',
+  // SSR contractor returns link
+  ssr_contractorReturns: 'fldkDCT4Z6pu9JXYC',
 };
 
 const TYPE_ORDER = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery','Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
@@ -540,7 +653,7 @@ const TYPE_ORDER = ['OptiComm Warehouse','Access Communications','Commscope Dire
 // ═══════════════════════════════════════════════════
 //  IN-MEMORY CACHE (loaded once on page load)
 // ═══════════════════════════════════════════════════
-let CACHE = { warehouses: null, subcontractors: null, representatives: null, materials: null };
+let CACHE = { warehouses: null, subcontractors: null, representatives: null, materials: null, opticommWarehouses: null, opticommByState: {}, opticommByRecId: {} };
 
 // ═══════════════════════════════════════════════════
 //  AIRTABLE HELPERS
@@ -625,7 +738,7 @@ async function atSearchByFormula(tableId, formula) {
 // ═══════════════════════════════════════════════════
 async function initData() {
   try {
-    const [wh, sc, reps, mats] = await Promise.all([
+    const [wh, sc, reps, mats, ocwh] = await Promise.all([
       atFetchAll(TBL.warehouses, { 
         filterByFormula: '{Active}=TRUE()', 
         fields: ['State','Location','State + Location','Warehouse Manager Name'],
@@ -644,11 +757,26 @@ async function initData() {
       atFetchAll(TBL.materialsQuantities, { 
         view: 'Grid view'           // ← Add this (most important)
       }),
+      atFetchAll(TBL.opticommWarehouses, {
+        filterByFormula: '{Active}=TRUE()',
+        fields: ['State','Location','State & Location'],
+      }),
     ]);
     CACHE.warehouses      = wh;
     CACHE.subcontractors  = sc;
     CACHE.representatives = reps;
-    CACHE.materials       = mats;
+    CACHE.materials         = mats;
+    CACHE.opticommWarehouses  = ocwh;
+    CACHE.opticommByState     = {};
+    CACHE.opticommByRecId     = {};
+    ocwh.forEach(r => {
+      const state = r.fields['State'];
+      if (state) {
+        if (!CACHE.opticommByState[state]) CACHE.opticommByState[state] = [];
+        CACHE.opticommByState[state].push(r);
+      }
+      CACHE.opticommByRecId[r.id] = r;
+    });
 
     // Build warehouse state/location map
     CACHE.warehouseByState = {};
@@ -695,6 +823,13 @@ function populateAllDropdowns() {
   ['wf-company','dm-company'].forEach(id => buildCompanyDropdown(document.getElementById(id)));
   // Set today's date
   ['inv-date','dm-date'].forEach(id => { const el = document.getElementById(id); if(el) el.value = todayStr(); });
+  // Contractor Return dropdowns
+  buildCompanyDropdown(document.getElementById('cr-company'));
+  buildStateDropdown(document.getElementById('cr-wh-state'));
+  // OptiComm Return dropdowns
+  buildStateDropdown(document.getElementById('or-wh-state'));
+  buildOpticommDropdown(document.getElementById('or-opticomm-wh'), '');
+
 }
 
 function buildStateDropdown(sel) {
@@ -997,6 +1132,29 @@ function goBack() {
     buildRepDropdown(document.getElementById('dm-rep'), '', document.getElementById('dm-email'), document.getElementById('dm-mobile'));
     document.getElementById('dm-subsections').innerHTML = '';
     document.getElementById('dm-notice').style.display = 'block';
+  } catch(e) {}
+
+  // Reset Contractor Stock Return
+  try {
+    document.getElementById('formContractorReturn').reset();
+    document.getElementById('cr-date').value = todayStr();
+    buildCompanyDropdown(document.getElementById('cr-company'));
+    buildRepDropdown(document.getElementById('cr-rep'), '', null, null);
+    document.getElementById('cr-subsections').innerHTML = '';
+    document.getElementById('cr-notice').style.display = 'block';
+    buildStateDropdown(document.getElementById('cr-wh-state'));
+    buildLocationDropdown(document.getElementById('cr-wh-location'), '');
+  } catch(e) {}
+
+  // Reset OptiComm Stock Return
+  try {
+    document.getElementById('formOpticommReturn').reset();
+    document.getElementById('or-date').value = todayStr();
+    buildStateDropdown(document.getElementById('or-wh-state'));
+    buildLocationDropdown(document.getElementById('or-wh-location'), '');
+    buildOpticommDropdown(document.getElementById('or-opticomm-wh'), '');
+    document.getElementById('or-subsections').innerHTML = '';
+    document.getElementById('or-notice').style.display = 'block';
   } catch(e) {}
 
   document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
@@ -2046,6 +2204,509 @@ bogUpdateMobDemob();
 //  KICK OFF
 // ═══════════════════════════════════════════════════
 initData();
+
+
+// ═══════════════════════════════════════════════════
+//  OPTICOMM WAREHOUSE DROPDOWN HELPER
+// ═══════════════════════════════════════════════════
+function buildOpticommDropdown(sel, selectedState) {
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select OptiComm Warehouse —</option>';
+  const records = selectedState
+    ? (CACHE.opticommByState[selectedState] || [])
+    : (CACHE.opticommWarehouses || []);
+  records.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.fields['State & Location'] || (r.fields['State'] + ' - ' + r.fields['Location']);
+    sel.appendChild(opt);
+  });
+  sel.disabled = records.length === 0;
+}
+
+// ═══════════════════════════════════════════════════
+//  CONTRACTOR STOCK RETURN
+// ═══════════════════════════════════════════════════
+(function() {
+  const crCompEl    = document.getElementById('cr-company');
+  const crRepEl     = document.getElementById('cr-rep');
+  const crWhStateEl = document.getElementById('cr-wh-state');
+  const crWhLocEl   = document.getElementById('cr-wh-location');
+  const crNotice    = document.getElementById('cr-notice');
+
+  crNotice.style.display = 'block';
+
+  crCompEl.addEventListener('change', function() {
+    buildRepDropdown(crRepEl, this.value, null, null);
+    document.getElementById('cr-subsections').innerHTML = '';
+    crNotice.style.display = 'block';
+  });
+
+  crRepEl.addEventListener('change', function() {
+    if (this.value) {
+      crNotice.style.display = 'none';
+      const repName = this.options[this.selectedIndex]?.textContent?.trim() || '';
+      loadRepInventoryForReturn(this.value, repName);
+    } else {
+      document.getElementById('cr-subsections').innerHTML = '';
+      crNotice.style.display = 'block';
+    }
+  });
+
+  crWhStateEl.addEventListener('change', function() {
+    buildLocationDropdown(crWhLocEl, this.value);
+  });
+
+  document.getElementById('formContractorReturn').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    let ok = true;
+    if (!validateSel('cr-company',     'crgrp-company'))     ok = false;
+    if (!validateSel('cr-rep',         'crgrp-rep'))         ok = false;
+    if (!validateSel('cr-wh-state',    'crgrp-wh-state'))    ok = false;
+    if (!validateSel('cr-wh-location', 'crgrp-wh-location')) ok = false;
+    if (!validateTxt('cr-date',        'crgrp-date'))        ok = false;
+    if (!ok) { alert('Please complete all required fields.'); return; }
+
+    const returnItems = [];
+    document.querySelectorAll('.cr-return-qty').forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      if (qty > 0) returnItems.push({
+        recId:   inp.dataset.record,
+        ssrRecId: inp.dataset.ssr,
+        qty,
+        onhand:  parseInt(inp.dataset.onhand) || 0,
+      });
+    });
+
+    if (returnItems.length === 0) { alert('Please enter a return quantity for at least one item.'); return; }
+
+    const overQty = returnItems.some(i => i.qty > i.onhand);
+    if (overQty) { alert('One or more return quantities exceed on-hand stock.'); return; }
+
+    const btn = document.getElementById('cr-submitBtn');
+    btnLoading(btn);
+
+    try {
+      const repRecId  = crRepEl.value;
+      const whLocRecId = crWhLocEl.value;
+      const dateVal   = document.getElementById('cr-date').value;
+      const notesVal  = document.getElementById('cr-notes').value.trim();
+      const whCacheRec = CACHE.warehouseByRecId[whLocRecId];
+      const locationName = whCacheRec?.fields?.['Location'] || '';
+
+      for (const item of returnItems) {
+        // Find or create WSR row for the destination warehouse + material
+        let wsrRecordId = null;
+        try {
+          const matCacheRec = CACHE.materials.find(r => r.id === item.recId);
+          const binId = matCacheRec?.fields?.['Bin ID'] || '';
+          const wsrRows = await atFetchAll(TBL.warehouseStockReport, {
+            filterByFormula: `AND(FIND("${locationName}",ARRAYJOIN({Warehouse Location})),FIND("${binId}",ARRAYJOIN({Bin ID})))`,
+            fields: ['Report Key'],
+          });
+          if (wsrRows.length > 0) {
+            wsrRecordId = wsrRows[0].id;
+          } else {
+            const newWsr = await atCreate(TBL.warehouseStockReport, {
+              [FLD.wsr_warehouse]: [whLocRecId],
+              [FLD.wsr_material]:  [item.recId],
+            });
+            wsrRecordId = newWsr.id;
+          }
+        } catch(wsrErr) { console.warn('WSR find/create failed:', wsrErr.message); }
+
+        // Find SSR record for this rep + material
+        let ssrRecordId = item.ssrRecId || null;
+        if (!ssrRecordId) {
+          try {
+            const allSsr = await atListRecords(TBL.subcontractorStockReport, {
+              fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P'],
+              returnFieldsByFieldId: true,
+            });
+            const ssrMatch = allSsr.find(row => {
+              const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
+              const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
+              return repLookup.includes(repRecId) && matLinked.includes(item.recId);
+            });
+            if (ssrMatch) ssrRecordId = ssrMatch.id;
+          } catch(ssrErr) { console.warn('SSR lookup failed:', ssrErr.message); }
+        }
+
+        // Create Contractor Stock Return record
+        const csrFields = {
+          [FLD.csr_representative]: [repRecId],
+          [FLD.csr_material]:       [item.recId],
+          [FLD.csr_warehouse]:      [whLocRecId],
+          [FLD.csr_qtyReturned]:    item.qty,
+          [FLD.csr_dateReturned]:   dateVal,
+        };
+        if (notesVal)    csrFields[FLD.csr_notes] = notesVal;
+        if (wsrRecordId) csrFields[FLD.csr_wsr]   = [wsrRecordId];
+        if (ssrRecordId) csrFields[FLD.csr_ssr]   = [ssrRecordId];
+
+        await atCreate(TBL.contractorReturns, csrFields);
+        console.log(`✅ Contractor return: mat ${item.recId}, qty ${item.qty} → ${locationName}`);
+      }
+
+      showSuccess('cr-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned. Returning to home screen…`);
+      this.reset();
+      document.getElementById('cr-date').value = todayStr();
+      buildCompanyDropdown(crCompEl);
+      buildRepDropdown(crRepEl, '', null, null);
+      buildStateDropdown(crWhStateEl);
+      buildLocationDropdown(crWhLocEl, '');
+      document.getElementById('cr-subsections').innerHTML = '';
+      crNotice.style.display = 'block';
+      setTimeout(() => goBack(), 3000);
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
+    finally { btnReset(btn, 'Submit Return'); }
+  });
+})();
+
+// Load rep's SSR stock on hand for contractor return form
+async function loadRepInventoryForReturn(repRecId, repName) {
+  const container = document.getElementById('cr-subsections');
+  container.innerHTML = '<div class="table-loading">⏳ Loading on-hand inventory for ' + repName + '...</div>';
+
+  try {
+    // Fetch all SSR rows for this rep
+    const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
+      fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldpr4nM1K7MkLdEI'],
+      returnFieldsByFieldId: true,
+    });
+
+    const repSsrRows = allSsrRows.filter(row => {
+      const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
+      return repLookup.includes(repRecId);
+    });
+
+    // Build map: materialRecId → { onhand, ssrRecId }
+    const ssrMap = {};
+    repSsrRows.forEach(row => {
+      const matIds = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
+      const onhand = parseFloat(row.fields['fldpr4nM1K7MkLdEI']) || 0;
+      matIds.forEach(matId => {
+        ssrMap[matId] = { onhand: Math.max(0, onhand), ssrRecId: row.id };
+      });
+    });
+
+    // Filter materials to only those with stock > 0
+    const materialsWithStock = CACHE.materials.filter(r => ssrMap[r.id] && ssrMap[r.id].onhand > 0);
+
+    if (materialsWithStock.length === 0) {
+      container.innerHTML = '<div class="table-empty">No stock on hand for ' + repName + '.</div>';
+      return;
+    }
+
+    // Render table grouped by type
+    const TYPE_ORDER_LOCAL = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery',
+      'Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
+    const groups = {};
+    materialsWithStock.forEach(r => {
+      const type = r.fields['Type'] || 'Other';
+      if (!groups[type]) groups[type] = [];
+      groups[type].push(r);
+    });
+
+    container.innerHTML = '';
+    const orderedTypes = TYPE_ORDER_LOCAL.filter(t => groups[t]).concat(Object.keys(groups).filter(t => !TYPE_ORDER_LOCAL.includes(t)));
+
+    orderedTypes.forEach(type => {
+      const rows = groups[type];
+      const sec = document.createElement('div');
+      sec.className = 'subsection open';
+
+      const hdr = document.createElement('div');
+      hdr.className = 'subsection-header';
+      hdr.onclick = () => sec.classList.toggle('open');
+      hdr.innerHTML = `<span class="subsection-title">${type} <span class="subsection-badge">${rows.length} item${rows.length!==1?'s':''}</span></span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
+      sec.appendChild(hdr);
+
+      const body = document.createElement('div');
+      body.className = 'subsection-body';
+      body.style.overflowX = 'auto';
+
+      const tbl = document.createElement('table');
+      tbl.className = 'mat-table';
+      tbl.innerHTML = '<thead><tr><th>OP Code</th><th>IT Code</th><th>Description</th><th>Qty On-Hand</th><th>Qty to Return</th></tr></thead>';
+
+      const tbody = document.createElement('tbody');
+      rows.forEach(r => {
+        const f = r.fields;
+        const ssrInfo = ssrMap[r.id] || { onhand: 0, ssrRecId: '' };
+        const opCode = f['OP Code']     || '—';
+        const itCode = f['IT Code']     || '—';
+        const desc   = f['Description'] || '—';
+        const onhand = ssrInfo.onhand;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="code-cell">${opCode}</td>
+          <td class="code-cell">${itCode}</td>
+          <td class="desc-cell">${desc}</td>
+          <td class="stock-cell">${onhand}</td>
+          <td>
+            <input type="number" class="qty-input cr-return-qty"
+              data-record="${r.id}"
+              data-ssr="${ssrInfo.ssrRecId}"
+              data-onhand="${onhand}"
+              min="0" max="${onhand}" value="" placeholder="0" inputmode="numeric" />
+            <div class="inline-warn">Exceeds on-hand stock</div>
+          </td>`;
+        // Qty validation
+        tr.querySelector('.cr-return-qty').addEventListener('input', function() {
+          const val = parseInt(this.value) || 0;
+          const max = parseInt(this.dataset.onhand) || 0;
+          if (val > max) {
+            this.classList.add('qty-over');
+            this.nextElementSibling.style.display = 'block';
+          } else {
+            this.classList.remove('qty-over');
+            this.nextElementSibling.style.display = 'none';
+          }
+        });
+        tbody.appendChild(tr);
+      });
+
+      tbl.appendChild(tbody);
+      body.appendChild(tbl);
+      sec.appendChild(body);
+      container.appendChild(sec);
+    });
+
+    console.log(`✅ Loaded ${materialsWithStock.length} material(s) with stock for ${repName}`);
+  } catch(err) {
+    console.error('loadRepInventoryForReturn error:', err);
+    container.innerHTML = `<div class="table-empty" style="color:var(--danger);">⚠️ Failed to load inventory: ${err.message}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  OPTICOMM STOCK RETURN
+// ═══════════════════════════════════════════════════
+(function() {
+  const orWhStateEl  = document.getElementById('or-wh-state');
+  const orWhLocEl    = document.getElementById('or-wh-location');
+  const orOpticommEl = document.getElementById('or-opticomm-wh');
+  const orNotice     = document.getElementById('or-notice');
+
+  orNotice.style.display = 'block';
+
+  orWhStateEl.addEventListener('change', function() {
+    buildLocationDropdown(orWhLocEl, this.value);
+    document.getElementById('or-subsections').innerHTML = '';
+    orNotice.style.display = 'block';
+  });
+
+  orWhLocEl.addEventListener('change', function() {
+    const opt = orWhLocEl.options[orWhLocEl.selectedIndex];
+    const stateVal = orWhStateEl.value;
+    const locVal   = opt?.dataset?.location || '';
+    if (stateVal && locVal) {
+      const sfName = getStockFieldName(stateVal, locVal);
+      buildWSRTableForReturn('or-subsections', this.value, stateVal, locVal, sfName);
+      orNotice.style.display = 'none';
+    }
+  });
+
+  orWhStateEl.addEventListener('change', function() {
+    buildOpticommDropdown(orOpticommEl, '');
+    buildLocationDropdown(orWhLocEl, this.value);
+    document.getElementById('or-subsections').innerHTML = '';
+    orNotice.style.display = 'block';
+  });
+
+  document.getElementById('formOpticommReturn').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    let ok = true;
+    if (!validateSel('or-wh-state',    'orgrp-wh-state'))    ok = false;
+    if (!validateSel('or-wh-location', 'orgrp-wh-location')) ok = false;
+    if (!validateSel('or-opticomm-wh', 'orgrp-opticomm-wh')) ok = false;
+    if (!validateTxt('or-date',        'orgrp-date'))        ok = false;
+    if (!ok) { alert('Please complete all required fields.'); return; }
+
+    const returnItems = [];
+    document.querySelectorAll('.or-return-qty').forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      if (qty > 0) returnItems.push({
+        recId:  inp.dataset.record,
+        wsrId:  inp.dataset.wsr,
+        qty,
+        onhand: parseInt(inp.dataset.onhand) || 0,
+      });
+    });
+
+    if (returnItems.length === 0) { alert('Please enter a return quantity for at least one item.'); return; }
+    if (returnItems.some(i => i.qty > i.onhand)) { alert('One or more quantities exceed stock on hand.'); return; }
+
+    const btn = document.getElementById('or-submitBtn');
+    btnLoading(btn);
+
+    try {
+      const whLocRecId   = orWhLocEl.value;
+      const opticommRecId = orOpticommEl.value;
+      const dateVal      = document.getElementById('or-date').value;
+      const notesVal     = document.getElementById('or-notes').value.trim();
+
+      for (const item of returnItems) {
+        const osrFields = {
+          [FLD.osr_warehouse]:   [whLocRecId],
+          [FLD.osr_opticommWh]:  [opticommRecId],
+          [FLD.osr_material]:    [item.recId],
+          [FLD.osr_qtyReturned]: item.qty,
+          [FLD.osr_dateReturned]:dateVal,
+        };
+        if (notesVal)  osrFields[FLD.osr_notes] = notesVal;
+        if (item.wsrId) osrFields[FLD.osr_wsr]  = [item.wsrId];
+
+        await atCreate(TBL.opticommReturns, osrFields);
+        console.log(`✅ OptiComm return: mat ${item.recId}, qty ${item.qty}`);
+      }
+
+      showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to OptiComm. Returning to home screen…`);
+      this.reset();
+      document.getElementById('or-date').value = todayStr();
+      buildStateDropdown(orWhStateEl);
+      buildLocationDropdown(orWhLocEl, '');
+      buildOpticommDropdown(orOpticommEl, '');
+      document.getElementById('or-subsections').innerHTML = '';
+      orNotice.style.display = 'block';
+      setTimeout(() => goBack(), 3000);
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
+    finally { btnReset(btn, 'Submit Return'); }
+  });
+})();
+
+// Build WSR table for OptiComm return — shows current stock on hand per material
+async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal, sfName) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '<div class="table-loading">⏳ Loading warehouse stock on hand...</div>';
+
+  try {
+    // Fetch WSR records for this warehouse
+    const wsrRows = await atFetchAll(TBL.warehouseStockReport, {
+      filterByFormula: `FIND("${locVal}",ARRAYJOIN({Warehouse Location}))`,
+      fields: ['Report Key', 'Current Stock On-Hand', 'Bin ID', 'OP Code', 'IT Code', 'Description', FLD.wsr_material],
+      returnFieldsByFieldId: false,
+    });
+
+    // Build map: materialRecId → { wsrRecId, onhand, binId, opCode, itCode, desc }
+    const wsrMap = {};
+    wsrRows.forEach(row => {
+      const f = row.fields;
+      const onhand = parseFloat(f['Current Stock On-Hand']) || 0;
+      if (onhand <= 0) return;
+      // Get material record ID from linked field
+      const matIds = (f['Material'] || []);
+      matIds.forEach(matId => {
+        const id = matId && matId.id ? matId.id : matId;
+        wsrMap[id] = {
+          wsrRecId: row.id,
+          onhand: Math.max(0, onhand),
+          binId:  f['Bin ID']      ? (Array.isArray(f['Bin ID'])      ? f['Bin ID'][0]      : f['Bin ID'])      : '—',
+          opCode: f['OP Code']     ? (Array.isArray(f['OP Code'])     ? f['OP Code'][0]     : f['OP Code'])     : '—',
+          itCode: f['IT Code']     ? (Array.isArray(f['IT Code'])     ? f['IT Code'][0]     : f['IT Code'])     : '—',
+          desc:   f['Description'] ? (Array.isArray(f['Description']) ? f['Description'][0] : f['Description']) : '—',
+        };
+      });
+    });
+
+    // Also check Materials Quantities stock field directly as fallback
+    const materialsWithStock = CACHE.materials.filter(r => {
+      const wsrEntry = wsrMap[r.id];
+      if (wsrEntry) return wsrEntry.onhand > 0;
+      const stockVal = parseFloat(r.fields[sfName]) || 0;
+      return stockVal > 0;
+    });
+
+    if (materialsWithStock.length === 0) {
+      container.innerHTML = '<div class="table-empty">No stock on hand for this warehouse.</div>';
+      return;
+    }
+
+    const TYPE_ORDER_LOCAL = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery',
+      'Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
+    const groups = {};
+    materialsWithStock.forEach(r => {
+      const type = r.fields['Type'] || 'Other';
+      if (!groups[type]) groups[type] = [];
+      groups[type].push(r);
+    });
+
+    container.innerHTML = '';
+    const orderedTypes = TYPE_ORDER_LOCAL.filter(t => groups[t]).concat(Object.keys(groups).filter(t => !TYPE_ORDER_LOCAL.includes(t)));
+
+    orderedTypes.forEach(type => {
+      const rows = groups[type];
+      const sec = document.createElement('div');
+      sec.className = 'subsection open';
+
+      const hdr = document.createElement('div');
+      hdr.className = 'subsection-header';
+      hdr.onclick = () => sec.classList.toggle('open');
+      hdr.innerHTML = `<span class="subsection-title">${type} <span class="subsection-badge">${rows.length} item${rows.length!==1?'s':''}</span></span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
+      sec.appendChild(hdr);
+
+      const body = document.createElement('div');
+      body.className = 'subsection-body';
+      body.style.overflowX = 'auto';
+
+      const tbl = document.createElement('table');
+      tbl.className = 'mat-table';
+      tbl.innerHTML = '<thead><tr><th>OP Code</th><th>IT Code</th><th>Bin ID</th><th>Description</th><th>Current Stock On-Hand</th><th>Qty to Return</th></tr></thead>';
+
+      const tbody = document.createElement('tbody');
+      rows.forEach(r => {
+        const f = r.fields;
+        const wsrInfo = wsrMap[r.id];
+        const onhand = wsrInfo ? wsrInfo.onhand : (parseFloat(f[sfName]) || 0);
+        const wsrRecId = wsrInfo ? wsrInfo.wsrRecId : '';
+        const opCode = wsrInfo ? wsrInfo.opCode : (f['OP Code'] || '—');
+        const itCode = wsrInfo ? wsrInfo.itCode : (f['IT Code'] || '—');
+        const binId  = wsrInfo ? wsrInfo.binId  : (f['Bin ID']  || '—');
+        const desc   = wsrInfo ? wsrInfo.desc   : (f['Description'] || '—');
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="code-cell">${opCode}</td>
+          <td class="code-cell">${itCode}</td>
+          <td style="text-align:center">${binId}</td>
+          <td class="desc-cell">${desc}</td>
+          <td class="stock-cell">${onhand}</td>
+          <td>
+            <input type="number" class="qty-input or-return-qty"
+              data-record="${r.id}"
+              data-wsr="${wsrRecId}"
+              data-onhand="${onhand}"
+              min="0" max="${onhand}" value="" placeholder="0" inputmode="numeric" />
+            <div class="inline-warn">Exceeds stock on hand</div>
+          </td>`;
+        tr.querySelector('.or-return-qty').addEventListener('input', function() {
+          const val = parseInt(this.value) || 0;
+          const max = parseInt(this.dataset.onhand) || 0;
+          if (val > max) {
+            this.classList.add('qty-over');
+            this.nextElementSibling.style.display = 'block';
+          } else {
+            this.classList.remove('qty-over');
+            this.nextElementSibling.style.display = 'none';
+          }
+        });
+        tbody.appendChild(tr);
+      });
+
+      tbl.appendChild(tbody);
+      body.appendChild(tbl);
+      sec.appendChild(body);
+      container.appendChild(sec);
+    });
+
+    console.log(`✅ WSR return table: ${materialsWithStock.length} material(s) with stock at ${locVal}`);
+  } catch(err) {
+    console.error('buildWSRTableForReturn error:', err);
+    container.innerHTML = `<div class="table-empty" style="color:var(--danger);">⚠️ Failed to load stock: ${err.message}</div>`;
+  }
+}
+
 </script>
 </body>
 </html>
