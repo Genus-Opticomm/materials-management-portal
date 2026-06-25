@@ -2657,7 +2657,7 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
         method: 'POST',
         headers: { 'Authorization': `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          filterByFormula: `{Warehouse} = "${whLocRecId}"`,
+          filterByFormula: `FIND("${whLocRecId}", ARRAYJOIN({Warehouse}))`,
           fields: [
             'fld9CNzC0JV6FgrQ4', // Report Key
             'fld2Ticr06WS5xSXS', // Current Stock On-Hand
