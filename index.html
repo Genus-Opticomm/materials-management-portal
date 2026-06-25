@@ -2652,10 +2652,10 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
   try {
     // Fetch WSR records for this specific warehouse using POST listRecords
     const wsrResponse = await fetch(
-      `https://api.airtable.com/v0/${BASE_ID}/${TBL.warehouseStockReport}/listRecords`,
+      `${AT_API}/${AT_BASE}/${TBL.warehouseStockReport}/listRecords`,
       {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filterByFormula: `{Warehouse} = "${whLocRecId}"`,
           fields: [
