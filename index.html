@@ -138,10 +138,10 @@
     <h2>Select Operation</h2>
     <div class="nav-buttons" id="navButtons">
       <button class="nav-btn" data-target="panel-inventory">Inventory Received</button>
-      <button class="nav-btn" data-target="panel-contractor-return">Contractor Stock Return</button>
+      <button class="nav-btn" data-target="panel-opticomm-return">OptiComm Stock Return</button>
       <button class="nav-btn" data-target="panel-workforce">Field Workforce Materials Request</button>
       <button class="nav-btn" data-target="panel-daily">Daily Materials Used</button>
-      <button class="nav-btn" data-target="panel-opticomm-return">OptiComm Stock Return</button>
+      <button class="nav-btn" data-target="panel-contractor-return">Contractor Stock Return</button>
       <!-- Boots on Ground button hidden until fields confirmed — code preserved below -->
       <!-- <button class="nav-btn" data-target="panel-bog">Boots on Ground</button> -->
     </div>
@@ -482,7 +482,7 @@
         <div class="subsections" id="cr-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <button type="submit" class="btn btn-primary" id="cr-submitBtn">Submit Return</button>
+          <button type="submit" class="btn btn-submit" id="cr-submitBtn">Submit Return</button>
         </div>
       </form>
     </div>
@@ -522,7 +522,7 @@
         <div class="subsections" id="or-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <button type="submit" class="btn btn-primary" id="or-submitBtn">Submit Return</button>
+          <button type="submit" class="btn btn-submit" id="or-submitBtn">Submit Return</button>
         </div>
       </form>
     </div>
@@ -2576,47 +2576,57 @@ async function loadRepInventoryForReturn(repRecId, repName) {
   });
 })();
 
-// Build WSR table for OptiComm return — shows current stock on hand per material
+// Build WSR table for OptiComm return — reads Current Stock On-Hand from WSR (Option A)
 async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal, sfName) {
   const container = document.getElementById(containerId);
   container.innerHTML = '<div class="table-loading">⏳ Loading warehouse stock on hand...</div>';
 
   try {
-    // Fetch WSR records for this warehouse
-    const wsrRows = await atFetchAll(TBL.warehouseStockReport, {
-      filterByFormula: `FIND("${locVal}",ARRAYJOIN({Warehouse Location}))`,
-      fields: ['Report Key', 'Current Stock On-Hand', 'Bin ID', 'OP Code', 'IT Code', 'Description', FLD.wsr_material],
-      returnFieldsByFieldId: false,
-    });
+    // Fetch WSR records for this specific warehouse using POST listRecords
+    const wsrResponse = await fetch(
+      `https://api.airtable.com/v0/${BASE_ID}/${TBL.warehouseStockReport}/listRecords`,
+      {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `{Warehouse} = "${whLocRecId}"`,
+          fields: [
+            'fld9CNzC0JV6FgrQ4', // Report Key
+            'fld2Ticr06WS5xSXS', // Current Stock On-Hand
+            'fldJJJ5xer1KpiMuQ', // Bin ID
+            'fldGU59f9JLc2vq9O', // OP Code
+            'fldqf7cTEt9LW4bmB', // IT Code
+            'fldqayVYTZkJ4cNRR', // Description
+            'fldVKATUzvdbV6brN', // Material (link)
+          ],
+          returnFieldsByFieldId: true,
+        })
+      }
+    );
+    const wsrData = await wsrResponse.json();
+    const wsrRows = wsrData.records || [];
 
     // Build map: materialRecId → { wsrRecId, onhand, binId, opCode, itCode, desc }
     const wsrMap = {};
     wsrRows.forEach(row => {
       const f = row.fields;
-      const onhand = parseFloat(f['Current Stock On-Hand']) || 0;
+      const onhand = parseFloat(f['fld2Ticr06WS5xSXS']) || 0;
       if (onhand <= 0) return;
-      // Get material record ID from linked field
-      const matIds = (f['Material'] || []);
+      const matIds = (f['fldVKATUzvdbV6brN'] || []);
       matIds.forEach(matId => {
         const id = matId && matId.id ? matId.id : matId;
         wsrMap[id] = {
           wsrRecId: row.id,
           onhand: Math.max(0, onhand),
-          binId:  f['Bin ID']      ? (Array.isArray(f['Bin ID'])      ? f['Bin ID'][0]      : f['Bin ID'])      : '—',
-          opCode: f['OP Code']     ? (Array.isArray(f['OP Code'])     ? f['OP Code'][0]     : f['OP Code'])     : '—',
-          itCode: f['IT Code']     ? (Array.isArray(f['IT Code'])     ? f['IT Code'][0]     : f['IT Code'])     : '—',
-          desc:   f['Description'] ? (Array.isArray(f['Description']) ? f['Description'][0] : f['Description']) : '—',
+          binId:  f['fldJJJ5xer1KpiMuQ'] ? (Array.isArray(f['fldJJJ5xer1KpiMuQ']) ? f['fldJJJ5xer1KpiMuQ'][0] : f['fldJJJ5xer1KpiMuQ']) : '—',
+          opCode: f['fldGU59f9JLc2vq9O'] ? (Array.isArray(f['fldGU59f9JLc2vq9O']) ? f['fldGU59f9JLc2vq9O'][0] : f['fldGU59f9JLc2vq9O']) : '—',
+          itCode: f['fldqf7cTEt9LW4bmB'] ? (Array.isArray(f['fldqf7cTEt9LW4bmB']) ? f['fldqf7cTEt9LW4bmB'][0] : f['fldqf7cTEt9LW4bmB']) : '—',
+          desc:   f['fldqayVYTZkJ4cNRR'] ? (Array.isArray(f['fldqayVYTZkJ4cNRR']) ? f['fldqayVYTZkJ4cNRR'][0] : f['fldqayVYTZkJ4cNRR']) : '—',
         };
       });
     });
 
-    // Also check Materials Quantities stock field directly as fallback
-    const materialsWithStock = CACHE.materials.filter(r => {
-      const wsrEntry = wsrMap[r.id];
-      if (wsrEntry) return wsrEntry.onhand > 0;
-      const stockVal = parseFloat(r.fields[sfName]) || 0;
-      return stockVal > 0;
-    });
+    const materialsWithStock = CACHE.materials.filter(r => wsrMap[r.id]);
 
     if (materialsWithStock.length === 0) {
       container.innerHTML = '<div class="table-empty">No stock on hand for this warehouse.</div>';
@@ -2656,14 +2666,13 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
 
       const tbody = document.createElement('tbody');
       rows.forEach(r => {
-        const f = r.fields;
         const wsrInfo = wsrMap[r.id];
-        const onhand = wsrInfo ? wsrInfo.onhand : (parseFloat(f[sfName]) || 0);
-        const wsrRecId = wsrInfo ? wsrInfo.wsrRecId : '';
-        const opCode = wsrInfo ? wsrInfo.opCode : (f['OP Code'] || '—');
-        const itCode = wsrInfo ? wsrInfo.itCode : (f['IT Code'] || '—');
-        const binId  = wsrInfo ? wsrInfo.binId  : (f['Bin ID']  || '—');
-        const desc   = wsrInfo ? wsrInfo.desc   : (f['Description'] || '—');
+        const onhand  = wsrInfo.onhand;
+        const wsrRecId = wsrInfo.wsrRecId;
+        const opCode = wsrInfo.opCode;
+        const itCode = wsrInfo.itCode;
+        const binId  = wsrInfo.binId;
+        const desc   = wsrInfo.desc;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -2700,7 +2709,7 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
       container.appendChild(sec);
     });
 
-    console.log(`✅ WSR return table: ${materialsWithStock.length} material(s) with stock at ${locVal}`);
+    console.log(`✅ WSR return table: ${materialsWithStock.length} material(s) with stock at ${locVal} (via WSR)`);
   } catch(err) {
     console.error('buildWSRTableForReturn error:', err);
     container.innerHTML = `<div class="table-empty" style="color:var(--danger);">⚠️ Failed to load stock: ${err.message}</div>`;
