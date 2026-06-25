@@ -1914,96 +1914,46 @@ async function loadRepInventory(repRecId, repName) {
   container.innerHTML = '<div class="table-loading">⏳ Calculating on-hand inventory for this representative...</div>';
 
   try {
-    // Filter by rep name via the lookup field — FIND on linked record ID fields
-    // always returns empty in Airtable API (confirmed by console testing).
-    const requests = await atFetchAll(TBL.materialsRequest, {
-      filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Rep Record ID (from Company Representative Name)}))`,
-      fields: ['Request ID', 'Materials Request Lines'],
-    });
-    console.log(`Found ${requests.length} request(s) for ${repName}`);
-
-    // ── Step 2: Collect all line-item record IDs linked from those requests ─────
-    const lineIds = [];
-    requests.forEach(r => {
-      (r.fields['Materials Request Lines'] || []).forEach(id => lineIds.push(id));
-    });
-    console.log(`Found ${lineIds.length} request line ID(s)`);
-
-    // ── Step 3: Fetch each Request Line to get Material + Qty Received ──────────
-    // Batch in groups of 10 to stay within URL limits.
-    let receivedLines = [];
-    if (lineIds.length > 0) {
-      const BATCH = 10;
-      for (let i = 0; i < lineIds.length; i += BATCH) {
-        const batch = lineIds.slice(i, i + BATCH);
-        const formula = batch.length === 1
-          ? `RECORD_ID()="${batch[0]}"`
-          : `OR(${batch.map(id => `RECORD_ID()="${id}"`).join(',')})`;
-        const rows = await atFetchAll(TBL.materialsRequestLines, {
-          filterByFormula: formula,
-          fields: ['Material', 'Qty Received'],
-        });
-        receivedLines = receivedLines.concat(rows);
+    // Fetch SSR records for this rep directly — SSR Current Stock On-Hand already
+    // incorporates received, used, and returned stock so it is the correct source.
+    const ssrResp = await fetch(
+      `${AT_API}/${AT_BASE}/${TBL.subcontractorStockReport}/listRecords`,
+      {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`,
+          fields: ['fldpr4nM1K7MkLdEI', 'fldXm5gW03QOzBE1P'],
+          returnFieldsByFieldId: true,
+        })
       }
-    }
-    console.log(`Fetched ${receivedLines.length} received line record(s)`);
+    );
+    const ssrData = await ssrResp.json();
+    const ssrRows = ssrData.records || [];
+    console.log(`Found ${ssrRows.length} SSR record(s) for ${repName}`);
 
-    // ── Step 4: Find all Materials Used header records for this rep ─────────────
-    const usedHeaders = await atFetchAll(TBL.materialsUsed, {
-      filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Rep Record ID (from Company Representative Name)}))`,
-      fields: ['Materials Used Lines'],
-    });
-    console.log(`Found ${usedHeaders.length} used header(s) for ${repName}`);
-
-    const usedLineIds = [];
-    usedHeaders.forEach(r => {
-      (r.fields['Materials Used Lines'] || []).forEach(id => usedLineIds.push(id));
-    });
-
-    // ── Step 5: Fetch each Used Line to get Material + Qty Used ─────────────────
-    let usedLines = [];
-    if (usedLineIds.length > 0) {
-      const BATCH = 10;
-      for (let i = 0; i < usedLineIds.length; i += BATCH) {
-        const batch = usedLineIds.slice(i, i + BATCH);
-        const formula = batch.length === 1
-          ? `RECORD_ID()="${batch[0]}"`
-          : `OR(${batch.map(id => `RECORD_ID()="${id}"`).join(',')})`;
-        const rows = await atFetchAll(TBL.materialsUsedLines, {
-          filterByFormula: formula,
-          fields: ['Material', 'Qty Used'],
-        });
-        usedLines = usedLines.concat(rows);
-      }
-    }
-    console.log(`Fetched ${usedLines.length} used line record(s)`);
-
-    // ── Step 6: Build on-hand map: materialRecId → net qty ──────────────────────
+    // Build onHandMap: materialRecId → Current Stock On-Hand from SSR
     const onHandMap = {};
-
-    receivedLines.forEach(line => {
-      const matId = (line.fields['Material'] || [])[0];
-      if (!matId) return;
-      onHandMap[matId] = (onHandMap[matId] || 0) + (parseInt(line.fields['Qty Received']) || 0);
+    ssrRows.forEach(row => {
+      const f = row.fields;
+      const onhand = parseFloat(f['fldpr4nM1K7MkLdEI']) || 0;
+      const matIds = f['fldXm5gW03QOzBE1P'] || [];
+      matIds.forEach(matId => {
+        const id = matId && matId.id ? matId.id : matId;
+        onHandMap[id] = Math.max(0, onhand);
+      });
     });
 
-    usedLines.forEach(line => {
-      const matId = (line.fields['Material'] || [])[0];
-      if (!matId) return;
-      onHandMap[matId] = (onHandMap[matId] || 0) - (parseInt(line.fields['Qty Used']) || 0);
-    });
-
-    // ── Step 7: Annotate materials cache with _onhand values ────────────────────
+    // Annotate materials cache with _onhand values from SSR
     const annotated = CACHE.materials.map(r => ({
       ...r,
-      fields: { ...r.fields, '_onhand': Math.max(0, onHandMap[r.id] || 0) }
+      fields: { ...r.fields, '_onhand': onHandMap.hasOwnProperty(r.id) ? onHandMap[r.id] : 0 }
     }));
 
-    // ── Step 8: Render using annotated data ─────────────────────────────────────
     buildDMTable('dm-subsections', annotated);
 
     const withStock = Object.values(onHandMap).filter(v => v > 0).length;
-    console.log(`✅ Rep on-hand: ${receivedLines.length} received lines, ${usedLines.length} used lines, ${withStock} materials with stock`);
+    console.log(`✅ Rep on-hand loaded from SSR: ${ssrRows.length} SSR records, ${withStock} materials with stock`);
 
   } catch (err) {
     console.error('loadRepInventory error:', err);
