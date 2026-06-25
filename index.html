@@ -1180,7 +1180,7 @@ function goBack() {
     if (!this.value) notice.style.display = 'block';
   });
 
-  locEl.addEventListener('change', async function() {
+  locEl.addEventListener('change', function() {
     const opt = this.options[this.selectedIndex];
     const whRec = opt ? CACHE.warehouseByRecId[this.value] : null;
     // Auto-fill warehouse manager if field exists
@@ -1188,8 +1188,9 @@ function goBack() {
     const stateVal = stateEl.value;
     const locVal   = opt?.dataset?.location || '';
     if (stateVal && locVal) {
+      const sfName = getStockFieldName(stateVal, locVal);
+      buildMaterialsTable('inv-subsections', 'inv', sfName);
       notice.style.display = 'none';
-      await buildInvMaterialsTableFromWSR('inv-subsections', this.value, stateVal, locVal);
     }
   });
 
@@ -1217,7 +1218,7 @@ function goBack() {
       const lineItems = [];
       document.querySelectorAll('.inv-qty').forEach(inp => {
         const qty = parseInt(inp.value) || 0;
-        if (qty > 0) lineItems.push({ recId: inp.dataset.record, qty, field: inp.dataset.field, stock: parseInt(inp.dataset.stock)||0 });
+        if (qty > 0) lineItems.push({ recId: inp.dataset.record, qty });
       });
 
       // ── Step A: Create Inventory Received header record ─────────────────
@@ -1235,10 +1236,6 @@ function goBack() {
       const locationName = whCacheRec?.fields?.['Location'] || '';
 
       for (const item of lineItems) {
-        await atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: item.stock + item.qty });
-        const cached = CACHE.materials.find(r => r.id === item.recId);
-        if (cached) cached.fields[item.field] = item.stock + item.qty;
-
         const matCacheRec = CACHE.materials.find(r => r.id === item.recId);
         const binId       = matCacheRec?.fields?.['Bin ID'] || '';
 
@@ -2575,130 +2572,6 @@ async function loadRepInventoryForReturn(repRecId, repName) {
   });
 })();
 
-// Build Inventory Received materials table from WSR — reads Current Stock On-Hand from WSR
-async function buildInvMaterialsTableFromWSR(containerId, whLocRecId, stateVal, locVal) {
-  const container = document.getElementById(containerId);
-  container.innerHTML = '<div class="table-loading">⏳ Loading current stock on hand...</div>';
-
-  try {
-    // Fetch all WSR records for this warehouse
-    const wsrResponse = await fetch(
-      `${AT_API}/${AT_BASE}/${TBL.warehouseStockReport}/listRecords`,
-      {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filterByFormula: `FIND("${whLocRecId}",ARRAYJOIN({Warehouse}))`,
-          fields: [
-            'fld2Ticr06WS5xSXS', // Current Stock On-Hand
-            'fldJJJ5xer1KpiMuQ', // Bin ID
-            'fldGU59f9JLc2vq9O', // OP Code
-            'fldqf7cTEt9LW4bmB', // IT Code
-            'fldqayVYTZkJ4cNRR', // Description
-            'fldVKATUzvdbV6brN', // Material (link)
-          ],
-          returnFieldsByFieldId: true,
-        })
-      }
-    );
-    const wsrData = await wsrResponse.json();
-    const wsrRows = wsrData.records || [];
-
-    // Build map: materialRecId → { onhand, binId, opCode, itCode, desc }
-    const wsrMap = {};
-    wsrRows.forEach(row => {
-      const f = row.fields;
-      const onhand = parseFloat(f['fld2Ticr06WS5xSXS']) || 0;
-      const matIds = (f['fldVKATUzvdbV6brN'] || []);
-      matIds.forEach(matId => {
-        const id = matId && matId.id ? matId.id : matId;
-        wsrMap[id] = {
-          onhand: Math.max(0, onhand),
-          binId:  f['fldJJJ5xer1KpiMuQ'] ? (Array.isArray(f['fldJJJ5xer1KpiMuQ']) ? f['fldJJJ5xer1KpiMuQ'][0] : f['fldJJJ5xer1KpiMuQ']) : '—',
-          opCode: f['fldGU59f9JLc2vq9O'] ? (Array.isArray(f['fldGU59f9JLc2vq9O']) ? f['fldGU59f9JLc2vq9O'][0] : f['fldGU59f9JLc2vq9O']) : '—',
-          itCode: f['fldqf7cTEt9LW4bmB'] ? (Array.isArray(f['fldqf7cTEt9LW4bmB']) ? f['fldqf7cTEt9LW4bmB'][0] : f['fldqf7cTEt9LW4bmB']) : '—',
-          desc:   f['fldqayVYTZkJ4cNRR'] ? (Array.isArray(f['fldqayVYTZkJ4cNRR']) ? f['fldqayVYTZkJ4cNRR'][0] : f['fldqayVYTZkJ4cNRR']) : '—',
-        };
-      });
-    });
-
-    // Show all materials from cache, with WSR stock on hand
-    const records = CACHE.materials;
-    if (!records || !records.length) {
-      container.innerHTML = '<div class="table-empty">No materials found.</div>';
-      return;
-    }
-
-    const groups = {};
-    records.forEach(r => {
-      const type = r.fields['Type'] || 'Other';
-      if (!groups[type]) groups[type] = [];
-      groups[type].push(r);
-    });
-
-    const orderedTypes = TYPE_ORDER.filter(t => groups[t]).concat(Object.keys(groups).filter(t => !TYPE_ORDER.includes(t)));
-
-    container.innerHTML = '';
-    orderedTypes.forEach(type => {
-      const rows = groups[type];
-      const sec = document.createElement('div');
-      sec.className = 'subsection';
-
-      const hdr = document.createElement('div');
-      hdr.className = 'subsection-header';
-      hdr.onclick = () => sec.classList.toggle('open');
-      hdr.innerHTML = `<span class="subsection-title">${type} <span class="subsection-badge">${rows.length} item${rows.length!==1?'s':''}</span></span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
-      sec.appendChild(hdr);
-
-      const body = document.createElement('div');
-      body.className = 'subsection-body';
-      body.style.overflowX = 'auto';
-
-      const tbl = document.createElement('table');
-      tbl.className = 'mat-table';
-      tbl.innerHTML = '<thead><tr><th>OP Code</th><th>IT Code</th><th>Description</th><th>Bin ID</th><th>Current Stock On-Hand</th><th>Qty Received</th></tr></thead>';
-
-      const tbody = document.createElement('tbody');
-      rows.forEach(r => {
-        const f = r.fields;
-        const wsrInfo = wsrMap[r.id];
-        const stock  = wsrInfo ? wsrInfo.onhand : 0;
-        const binId  = wsrInfo ? wsrInfo.binId  : (f['Bin ID']      || '—');
-        const opCode = wsrInfo ? wsrInfo.opCode : (f['OP Code']     || '—');
-        const itCode = wsrInfo ? wsrInfo.itCode : (f['IT Code']     || '—');
-        const desc   = wsrInfo ? wsrInfo.desc   : (f['Description'] || '—');
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="code-cell">${opCode}</td>
-          <td class="code-cell">${itCode}</td>
-          <td class="desc-cell">${desc}</td>
-          <td style="text-align:center">${binId}</td>
-          <td class="stock-cell">${stock}</td>
-          <td>
-            <input type="number" class="inv-qty qty-input"
-              data-record="${r.id}"
-              min="0" value="" placeholder="0" inputmode="numeric" />
-            <div class="inline-warn">Invalid quantity</div>
-          </td>`;
-        tbody.appendChild(tr);
-      });
-
-      tbl.appendChild(tbody);
-      body.appendChild(tbl);
-      sec.appendChild(body);
-      container.appendChild(sec);
-    });
-
-    console.log(`✅ Inv form loaded WSR stock for ${locVal}`);
-  } catch(err) {
-    console.error('buildInvMaterialsTableFromWSR error:', err);
-    // Fallback to Materials Quantities if WSR fetch fails
-    const sfName = getStockFieldName(stateVal, locVal);
-    buildMaterialsTable(containerId, 'inv', sfName);
-  }
-}
-
 // Build WSR table for OptiComm return — reads Current Stock On-Hand from WSR (Option A)
 async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal, sfName) {
   const container = document.getElementById(containerId);
@@ -2707,10 +2580,10 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
   try {
     // Fetch WSR records for this specific warehouse using POST listRecords
     const wsrResponse = await fetch(
-      `${AT_API}/${AT_BASE}/${TBL.warehouseStockReport}/listRecords`,
+      `https://api.airtable.com/v0/${BASE_ID}/${TBL.warehouseStockReport}/listRecords`,
       {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filterByFormula: `{Warehouse} = "${whLocRecId}"`,
           fields: [
