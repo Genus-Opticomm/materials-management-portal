@@ -700,6 +700,18 @@ async function atCreate(tableId, fields) {
   return res.json();
 }
 
+// Batch create up to 10 records in one API call
+async function atCreateBatch(tableId, fieldsArray) {
+  const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ records: fieldsArray.map(fields => ({ fields })) })
+  });
+  if (!res.ok) throw new Error(`AT batch create ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return data.records;
+}
+
 async function atListRecords(tableId, body) {
   const url = `${AT_API}/${AT_BASE}/${tableId}/listRecords`;
   let records = [], offset = null;
@@ -1234,46 +1246,65 @@ function goBack() {
       const whCacheRec   = CACHE.warehouseByRecId[locRecId];
       const locationName = whCacheRec?.fields?.['Location'] || '';
 
-      for (const item of lineItems) {
-        await atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: item.stock + item.qty });
-        const cached = CACHE.materials.find(r => r.id === item.recId);
-        if (cached) cached.fields[item.field] = item.stock + item.qty;
+      // Pre-fetch all WSR rows for this warehouse in one call
+      const allWsrRows = await atFetchAll(TBL.warehouseStockReport, {
+        filterByFormula: `FIND("${locationName}",ARRAYJOIN({Warehouse Location}))`,
+        fields: ['Report Key', 'Bin ID'],
+      });
+      const wsrByBinId = {};
+      allWsrRows.forEach(row => {
+        const b = (row.fields['Bin ID'] || '').toString();
+        if (b) wsrByBinId[b] = row.id;
+      });
 
+      // Resolve WSR IDs, create missing rows, collect MQ + IRL work
+      const irlBatch = [];
+      const mqPromises = [];
+
+      for (const item of lineItems) {
         const matCacheRec = CACHE.materials.find(r => r.id === item.recId);
         const binId       = matCacheRec?.fields?.['Bin ID'] || '';
 
-        let wsrRecordId = null;
-        try {
-          const wsrRows = await atFetchAll(TBL.warehouseStockReport, {
-            filterByFormula: `AND(FIND("${locationName}",ARRAYJOIN({Warehouse Location})),FIND("${binId}",ARRAYJOIN({Bin ID})))`,
-            fields: ['Report Key'],
-          });
-          if (wsrRows.length > 0) {
-            wsrRecordId = wsrRows[0].id;
-          } else {
+        mqPromises.push(
+          atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: item.stock + item.qty })
+            .then(() => {
+              const cached = CACHE.materials.find(r => r.id === item.recId);
+              if (cached) cached.fields[item.field] = item.stock + item.qty;
+            })
+        );
+
+        let wsrRecordId = wsrByBinId[binId] || null;
+        if (!wsrRecordId) {
+          try {
             const newWsr = await atCreate(TBL.warehouseStockReport, {
               [FLD.wsr_warehouse]: [locRecId],
               [FLD.wsr_material]:  [item.recId],
             });
             wsrRecordId = newWsr.id;
+            wsrByBinId[binId] = wsrRecordId;
             console.log(`Created WSR row: ${locationName} | Bin ${binId}`);
-          }
-        } catch(wsrErr) {
-          console.warn('WSR find/create failed:', wsrErr.message);
+          } catch(wsrErr) { console.warn('WSR create failed:', wsrErr.message); }
         }
 
-        // B4: Create the Inventory Received Line record
         const irlFields = {
           [FLD.irl_receipt]:  [invRecordId],
           [FLD.irl_material]: [item.recId],
           [FLD.irl_qty]:      item.qty,
         };
         if (wsrRecordId) irlFields[FLD.irl_wsr] = [wsrRecordId];
-        await atCreate(TBL.inventoryReceivedLines, irlFields);
-        console.log(`✅ Inventory line: Bin ${binId}, qty ${item.qty}`);
+        irlBatch.push(irlFields);
       }
 
-      showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
+      // Run MQ updates in parallel + batch-create IRL records
+      const irlChunks = [];
+      for (let i = 0; i < irlBatch.length; i += 10) irlChunks.push(irlBatch.slice(i, i + 10));
+      await Promise.all([
+        ...mqPromises,
+        ...irlChunks.map(chunk => atCreateBatch(TBL.inventoryReceivedLines, chunk))
+      ]);
+      console.log(`✅ Inventory: ${irlBatch.length} line(s) created, MQ updated in parallel`);
+
+            showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
       this.reset();
       document.getElementById('inv-date').value = todayStr();
       buildStateDropdown(stateEl);
@@ -1833,79 +1864,61 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
 
       const mainUsedId = newUsedRecord.id;
 
-      // 2. Create Line Items (using Field IDs for reliability)
+      // 2. Batch-create MUL line items (up to 10 per API call)
       console.log(`Creating ${usedItems.length} usage line items...`);
+      const dmDate = document.getElementById('dm-date').value;
+      const mulBatchFields = usedItems.map(item => ({
+        'fldbEHOSuv028hMjD': [mainUsedId],
+        'fld0u8aUHdRsSIJLm': [item.recId],
+        'fldGV26CqV55FYGv6': item.qty,
+        'flduIFkorq5wVuNNz': dmDate,
+      }));
       const createdUsedLineIds = [];
-      for (const item of usedItems) {
-        try {
-          const usedLine = await atCreate(TBL.materialsUsedLines, {
-            'fldbEHOSuv028hMjD': [mainUsedId],                                   // "Used" field
-            'fld0u8aUHdRsSIJLm': [item.recId],                                   // "Material" field
-            'fldGV26CqV55FYGv6': item.qty,                                        // "Qty Used" field
-            'flduIFkorq5wVuNNz': document.getElementById('dm-date').value,        // "Date Used" field
-          });
-          createdUsedLineIds.push({ lineId: usedLine.id, recId: item.recId });
-          console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
-        } catch (lineErr) {
-          console.error(`Failed to create line item for ${item.recId}:`, lineErr);
-        }
+      for (let i = 0; i < mulBatchFields.length; i += 10) {
+        const chunk = mulBatchFields.slice(i, i + 10);
+        const created = await atCreateBatch(TBL.materialsUsedLines, chunk);
+        created.forEach((rec, idx) => {
+          createdUsedLineIds.push({ lineId: rec.id, recId: usedItems[i + idx].recId });
+          console.log(`✅ MUL created: ${rec.id}`);
+        });
       }
 
-      // 3. Write to Subcontractor Stock Report (one record per rep+material combo)
+            // 3+4. Fetch SSR once, then write SSR + SJR in parallel per item
       const repName = document.getElementById('dm-rep').options[document.getElementById('dm-rep').selectedIndex]?.textContent?.trim() || '';
-      for (const item of createdUsedLineIds) {
+      const allSsrRows = await atListRecords('tblAkiFxWxDYV2Alm', {
+        fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
+        returnFieldsByFieldId: true,
+      });
+
+      await Promise.all(createdUsedLineIds.map(async item => {
         try {
-          // Use POST /listRecords for reliable filtering — GET filterByFormula
-          // fails silently on lookup fields like Rep Record ID (from Representative)
-          // Fetch all SSR records and match client-side.
-          // (Airtable filterByFormula cannot match linked field record IDs via ARRAYJOIN)
-          const allSsrRows = await atListRecords('tblAkiFxWxDYV2Alm', {
-            fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
-            returnFieldsByFieldId: true,
-          });
-          const ssrMatch = allSsrRows.find(function(row) {
+          const ssrMatch = allSsrRows.find(row => {
             const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
-            const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(function(r) { return r && r.id ? r.id : r; });
+            const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
             return repLookup.includes(repRecId) && matLinked.includes(item.recId);
           });
-          console.log('SSR lookup rep=' + repRecId + ' mat=' + item.recId + ': ' + (ssrMatch ? 'FOUND ' + ssrMatch.id : 'not found'));
           if (ssrMatch) {
-            // Append MUL to existing SSR row — Airtable REST API wants plain string array
-            const existingRaw = ssrMatch.fields['fldozoAjUrm312vj9'] || [];
-            const existingIds = existingRaw.map(function(r) { return r && r.id ? r.id : r; });
+            const existingIds = (ssrMatch.fields['fldozoAjUrm312vj9'] || []).map(r => r && r.id ? r.id : r);
             if (!existingIds.includes(item.lineId)) existingIds.push(item.lineId);
-            await atUpdate('tblAkiFxWxDYV2Alm', ssrMatch.id, {
-              'fldozoAjUrm312vj9': existingIds,
-            });
-            console.log('Updated SSR ' + ssrMatch.id + ' for ' + repName + ' + ' + item.recId);
+            await atUpdate('tblAkiFxWxDYV2Alm', ssrMatch.id, { 'fldozoAjUrm312vj9': existingIds });
           } else {
-            // No existing SSR row — create one
             await atCreate('tblAkiFxWxDYV2Alm', {
               'fldV1yEmErUzd4oFw': [repRecId],
               'fldXm5gW03QOzBE1P': [item.recId],
               'fldozoAjUrm312vj9': [item.lineId],
             });
-            console.log('Created new SSR row for ' + repName + ' + ' + item.recId);
           }
-        } catch (ssrErr) {
-          console.warn('SSR write failed:', ssrErr.message);
-        }
-      }
+        } catch (ssrErr) { console.warn('SSR write failed:', ssrErr.message); }
 
-      // 4. Write to Subcontractor Job Report (one record per MUL line item)
-      for (const item of createdUsedLineIds) {
         try {
           await atCreate('tbl5pCmx7a4tpNCNk', {
             'fldOsnJEHcWjfe7fV': [repRecId],
             'fldkCo5VFj09XALYv': [item.lineId],
           });
-          console.log('Created SJR row for MUL ' + item.lineId + ' (' + item.recId + ')');
-        } catch (sjrErr) {
-          console.warn('SJR write failed for ' + item.lineId + ':', sjrErr.message);
-        }
-      }
+        } catch (sjrErr) { console.warn('SJR write failed:', sjrErr.message); }
+      }));
 
-      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
+            showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
       
       // Reset form
       this.reset();
@@ -2516,20 +2529,22 @@ async function loadRepInventoryForReturn(repRecId, repName) {
       const dateVal      = document.getElementById('or-date').value;
       const notesVal     = document.getElementById('or-notes').value.trim();
 
-      for (const item of returnItems) {
-        const osrFields = {
-          [FLD.osr_warehouse]:   [whLocRecId],
-          [FLD.osr_opticommWh]:  [opticommRecId],
-          [FLD.osr_material]:    [item.recId],
-          [FLD.osr_qtyReturned]: item.qty,
-          [FLD.osr_dateReturned]:dateVal,
+      const osrBatchFields = returnItems.map(item => {
+        const f = {
+          [FLD.osr_warehouse]:    [whLocRecId],
+          [FLD.osr_opticommWh]:   [opticommRecId],
+          [FLD.osr_material]:     [item.recId],
+          [FLD.osr_qtyReturned]:  item.qty,
+          [FLD.osr_dateReturned]: dateVal,
         };
-        if (notesVal)  osrFields[FLD.osr_notes] = notesVal;
-        if (item.wsrId) osrFields[FLD.osr_wsr]  = [item.wsrId];
-
-        await atCreate(TBL.opticommReturns, osrFields);
-        console.log(`✅ OptiComm return: mat ${item.recId}, qty ${item.qty}`);
+        if (notesVal)   f[FLD.osr_notes] = notesVal;
+        if (item.wsrId) f[FLD.osr_wsr]   = [item.wsrId];
+        return f;
+      });
+      for (let i = 0; i < osrBatchFields.length; i += 10) {
+        await atCreateBatch(TBL.opticommReturns, osrBatchFields.slice(i, i + 10));
       }
+      console.log(`✅ OptiComm return: ${returnItems.length} item(s) submitted`);
 
       showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to OptiComm. Returning to home screen…`);
       this.reset();
