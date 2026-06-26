@@ -727,29 +727,42 @@ async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
     return;
   }
   try {
-    // Fetch all WSR rows for this warehouse with all fields needed for Excel
-    const wsrRows = await atFetchAll(TBL.warehouseStockReport, {
-      filterByFormula: `FIND("${locationName}",ARRAYJOIN({Warehouse Location}))`,
-      fields: [
-        'fld9CNzC0JV6FgrQ4', // Report Key
-        'fldKtogSlya0m4AOW', // Warehouse State
-        'fldD9D0Mku3AARN2L', // Warehouse Location
-        'fldkGc6ZlyLopCzaL', // Warehouse Manager Name
-        'fldrhZ9di7L69o1NP', // Warehouse Manager Email
-        'fldGU59f9JLc2vq9O', // OP Code
-        'fldqf7cTEt9LW4bmB', // IT Code
-        'fldqayVYTZkJ4cNRR', // Description
-        'fldJJJ5xer1KpiMuQ', // Bin ID
-        'fldszummEzAtmSXxK', // Total Stock Received
-        'fldQmxxDbNVwrEP4I', // Total Stock Collected
-        'fldbEqmnOlnfo6zcz', // Current Stock Requested
-        'fldsvoANNKSpTIyXx', // Total Returned from Contractors
-        'fld28aPzjD3XGbsX3', // Total Returned to OptiComm
-        'fld2Ticr06WS5xSXS', // Current Stock On-Hand
-        'fldjjt4inQZLmGAz7', // Current Stock Available
-      ],
-      returnFieldsByFieldId: true,
-    });
+    console.log(`sendWSRBatchToPA: fetching WSR for "${locationName}" (${locRecId})`);
+
+    // Use POST listRecords — GET filterByFormula unreliable on lookup fields
+    const wsrResp = await fetch(
+      `${AT_API}/${AT_BASE}/${TBL.warehouseStockReport}/listRecords`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `AND(FIND("${stateVal}",ARRAYJOIN({Warehouse State})),FIND("${locationName}",ARRAYJOIN({Warehouse Location})))`,
+          fields: [
+            'fld9CNzC0JV6FgrQ4', // Report Key
+            'fldKtogSlya0m4AOW', // Warehouse State
+            'fldD9D0Mku3AARN2L', // Warehouse Location
+            'fldkGc6ZlyLopCzaL', // Warehouse Manager Name
+            'fldrhZ9di7L69o1NP', // Warehouse Manager Email
+            'fldGU59f9JLc2vq9O', // OP Code
+            'fldqf7cTEt9LW4bmB', // IT Code
+            'fldqayVYTZkJ4cNRR', // Description
+            'fldJJJ5xer1KpiMuQ', // Bin ID
+            'fldszummEzAtmSXxK', // Total Stock Received
+            'fldQmxxDbNVwrEP4I', // Total Stock Collected
+            'fldbEqmnOlnfo6zcz', // Current Stock Requested
+            'fldsvoANNKSpTIyXx', // Total Returned from Contractors
+            'fld28aPzjD3XGbsX3', // Total Returned to OptiComm
+            'fld2Ticr06WS5xSXS', // Current Stock On-Hand
+            'fldjjt4inQZLmGAz7', // Current Stock Available
+          ],
+          returnFieldsByFieldId: true,
+        })
+      }
+    );
+    const wsrData = await wsrResp.json();
+    const wsrRows = wsrData.records || [];
+
+    console.log(`sendWSRBatchToPA: ${wsrRows.length} WSR rows found for ${locationName}`);
 
     if (!wsrRows.length) {
       console.warn('sendWSRBatchToPA: no WSR rows found for', locationName);
@@ -764,26 +777,26 @@ async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
     const payload = wsrRows.map(row => {
       const f = row.fields;
       return {
-        reportKey:                  unwrap(f['fld9CNzC0JV6FgrQ4']),
-        state:                      unwrap(f['fldKtogSlya0m4AOW']),
-        warehouseLocation:          unwrap(f['fldD9D0Mku3AARN2L']),
-        warehouseManagerName:       unwrap(f['fldkGc6ZlyLopCzaL']),
-        warehouseManagerEmail:      unwrap(f['fldrhZ9di7L69o1NP']),
-        opCode:                     unwrap(f['fldGU59f9JLc2vq9O']),
-        itCode:                     unwrap(f['fldqf7cTEt9LW4bmB']),
-        description:                unwrap(f['fldqayVYTZkJ4cNRR']),
-        binID:                      unwrap(f['fldJJJ5xer1KpiMuQ']),
-        totalStockReceived:         Number(f['fldszummEzAtmSXxK']) || 0,
-        totalStockCollected:        Number(f['fldQmxxDbNVwrEP4I']) || 0,
-        currentStockRequested:      Number(f['fldbEqmnOlnfo6zcz']) || 0,
+        reportKey:                    unwrap(f['fld9CNzC0JV6FgrQ4']),
+        state:                        unwrap(f['fldKtogSlya0m4AOW']),
+        warehouseLocation:            unwrap(f['fldD9D0Mku3AARN2L']),
+        warehouseManagerName:         unwrap(f['fldkGc6ZlyLopCzaL']),
+        warehouseManagerEmail:        unwrap(f['fldrhZ9di7L69o1NP']),
+        opCode:                       unwrap(f['fldGU59f9JLc2vq9O']),
+        itCode:                       unwrap(f['fldqf7cTEt9LW4bmB']),
+        description:                  unwrap(f['fldqayVYTZkJ4cNRR']),
+        binID:                        unwrap(f['fldJJJ5xer1KpiMuQ']),
+        totalStockReceived:           Number(f['fldszummEzAtmSXxK']) || 0,
+        totalStockCollected:          Number(f['fldQmxxDbNVwrEP4I']) || 0,
+        currentStockRequested:        Number(f['fldbEqmnOlnfo6zcz']) || 0,
         totalReturnedFromContractors: Number(f['fldsvoANNKSpTIyXx']) || 0,
-        totalReturnedToOptiComm:    Number(f['fld28aPzjD3XGbsX3']) || 0,
-        currentStockOnHand:         Number(f['fld2Ticr06WS5xSXS']) || 0,
-        currentStockAvailable:      Number(f['fldjjt4inQZLmGAz7']) || 0,
+        totalReturnedToOptiComm:      Number(f['fld28aPzjD3XGbsX3']) || 0,
+        currentStockOnHand:           Number(f['fld2Ticr06WS5xSXS']) || 0,
+        currentStockAvailable:        Number(f['fldjjt4inQZLmGAz7']) || 0,
       };
     });
 
-    // Fire and forget — don't block the UI on Excel sync
+    // Fire and forget
     fetch(PA_WSR_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
