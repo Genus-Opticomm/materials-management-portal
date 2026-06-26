@@ -2556,6 +2556,9 @@ async function buildInvMaterialsTableFromWSR(containerId, whLocRecId, stateVal, 
     );
     const wsrData = await wsrResponse.json();
     const wsrRows = wsrData.records || [];
+      console.log('WSR fetch result:', JSON.stringify(wsrData));
+      console.log('whLocRecId:', whLocRecId);
+      console.log('wsrRows count:', wsrRows.length);
 
     // Build map: materialRecId → WSR stock on hand
     const wsrMap = {};
@@ -2673,6 +2676,9 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
     );
     const wsrData = await wsrResponse.json();
     const wsrRows = wsrData.records || [];
+      console.log('WSR fetch result:', JSON.stringify(wsrData));
+      console.log('whLocRecId:', whLocRecId);
+      console.log('wsrRows count:', wsrRows.length);
 
     // Build map: materialRecId → { wsrRecId, onhand, binId, opCode, itCode, desc }
     const wsrMap = {};
