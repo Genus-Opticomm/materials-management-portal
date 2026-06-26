@@ -1588,8 +1588,8 @@ function goBack() {
       await Promise.all(mqPromises);
       console.log(`✅ Materials Quantities updated`);
 
-      // Send all WSR rows for this warehouse to Excel in one batch (fire and forget)
-      sendWSRBatchToPA(locRecId, locationName, stateEl.value);
+      // Send WSR batch after delay for rollup to settle
+      setTimeout(() => sendWSRBatchToPA(locRecId, locationName, stateEl.value), 8000);
 
             showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
       this.reset();
@@ -1739,9 +1739,11 @@ let wfFoundRecId = null;
           console.log('✅ Date Collected written:', dateCollected);
         }
 
-        // Send WSR and SSR batches to Excel (fire and forget)
-        sendWSRBatchToPA(locRecId, locName, stateName);
-        sendSSRBatchToPA(repRecId);
+        // Send WSR + SSR after delay for rollups to settle
+        setTimeout(() => {
+          sendWSRBatchToPA(locRecId, locName, stateName);
+          sendSSRBatchToPA(repRecId);
+        }, 8000);
 
         showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
       } else {
@@ -1845,9 +1847,8 @@ let wfFoundRecId = null;
           matRec.fields[stockField] = newStock;
         }
 
-        // Send WSR and SSR batches to Excel (fire and forget)
-        sendWSRBatchToPA(locRecId, wfLocName, stateName);
-        sendSSRBatchToPA(repRecId);
+         // Send WSR batch after delay for rollup to settle
+        setTimeout(() => sendWSRBatchToPA(locRecId, wfLocName, stateName), 8000);
 
         showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items). Returning to home screen…`);
       }
@@ -2214,10 +2215,12 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       }));
 
             // Send SSR and SJR batches to Excel (fire and forget)
-      sendSSRBatchToPA(repRecId);
-      sendSJRBatchToPA(repRecId);
-
-      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
+      // Send SSR + SJR after delay for rollups to settle
+      setTimeout(() => {
+        sendSSRBatchToPA(repRecId);
+        sendSJRBatchToPA(repRecId);
+      }, 8000);
+       showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
       
       // Reset form
       this.reset();
@@ -2630,10 +2633,12 @@ function buildOpticommDropdown(sel, selectedState) {
       }
 
       // Send CSR, WSR and SSR batches to Excel (fire and forget)
-      sendCSRBatchToPA(repRecId);
-      sendWSRBatchToPA(whLocRecId, locationName, whCacheRec?.fields?.['State'] || '');
-      sendSSRBatchToPA(repRecId);
-
+      // Send CSR + WSR + SSR after delay for rollups to settle
+      setTimeout(() => {
+        sendCSRBatchToPA(repRecId);
+        sendWSRBatchToPA(whLocRecId, locationName, whCacheRec?.fields?.['State'] || '');
+        sendSSRBatchToPA(repRecId);
+      }, 8000); 
       showSuccess('cr-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned. Returning to home screen…`);
       this.reset();
       document.getElementById('cr-date').value = todayStr();
@@ -2854,9 +2859,11 @@ async function loadRepInventoryForReturn(repRecId, repName) {
       const orWhCacheRec = CACHE.warehouseByRecId[whLocRecId];
       const orLocationName = orWhCacheRec?.fields?.['Location'] || '';
       const orStateName = orWhCacheRec?.fields?.['State'] || '';
-      sendOSRBatchToPA(whLocRecId);
-      sendWSRBatchToPA(whLocRecId, orLocationName, orStateName);
-
+      // Send OSR + WSR after delay for rollups to settle
+      setTimeout(() => {
+        sendOSRBatchToPA(whLocRecId);
+        sendWSRBatchToPA(whLocRecId, orLocationName, orStateName);
+      }, 8000);
       showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to OptiComm. Returning to home screen…`);
       this.reset();
       document.getElementById('or-date').value = todayStr();
