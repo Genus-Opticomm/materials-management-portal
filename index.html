@@ -1265,6 +1265,7 @@ function goBack() {
         const matCacheRec = CACHE.materials.find(r => r.id === item.recId);
         const binId       = matCacheRec?.fields?.['Bin ID'] || '';
 
+        // Queue MQ update — will run after IRL so WSR rollup is accurate first
         mqPromises.push(
           atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: item.stock + item.qty })
             .then(() => {
@@ -1295,14 +1296,16 @@ function goBack() {
         irlBatch.push(irlFields);
       }
 
-      // Run MQ updates in parallel + batch-create IRL records
+      // Create IRL records FIRST — WSR rollup (Total Stock Received) depends on these
+      // being present before the Airtable automation fires and sends to Power Automate
       const irlChunks = [];
       for (let i = 0; i < irlBatch.length; i += 10) irlChunks.push(irlBatch.slice(i, i + 10));
-      await Promise.all([
-        ...mqPromises,
-        ...irlChunks.map(chunk => atCreateBatch(TBL.inventoryReceivedLines, chunk))
-      ]);
-      console.log(`✅ Inventory: ${irlBatch.length} line(s) created, MQ updated in parallel`);
+      await Promise.all(irlChunks.map(chunk => atCreateBatch(TBL.inventoryReceivedLines, chunk)));
+      console.log(`✅ Inventory: ${irlBatch.length} IRL line(s) created`);
+
+      // Then update Materials Quantities in parallel (independent of WSR rollup)
+      await Promise.all(mqPromises);
+      console.log(`✅ Materials Quantities updated`);
 
             showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
       this.reset();
