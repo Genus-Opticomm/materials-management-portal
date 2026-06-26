@@ -541,6 +541,10 @@ const AT_BASE  = 'appLWbPBLepjoO6F4';
 // ── Power Automate webhook URLs ──────────────────────────────────
 // Replace with your actual WSR webhook URL (with sp/sv/sig params)
 const PA_WSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c96971659fa343ba9290c5c8bd51100c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-nLh4hCs_UEsd7DlAOIeNtIAQWI7UqjUPy6dDynjtl8';
+const PA_SSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6c7551321b01416c8d7a0b6127f58fb0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=7ZhHQogCqtp7a6gp-90tXAiP4whoyVyKyZMVLBXYvL4';
+const PA_SJR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/7e65653d80fa42bea5045d2cb94c4080/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=30TUImpQ82nwDumYglJsEOl6Zn3wRlkb3kmYtyxlS4A';
+const PA_CSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/fd8f5f98a93f4db79483a117f7896cb2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xnIQ-CC19447bRty-0MqYqiIObpSTlTa3RCzubD3rao';
+const PA_OSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b02575e45de346c391b0f2b908b7f8bc/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uC_UfLCVhci3t5hCDU9MEnGxUT0zh3ueYqNaKicRHo8';
 const AT_API   = 'https://api.airtable.com/v0';
 
 const TBL = {
@@ -793,6 +797,200 @@ async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
   } catch(err) {
     console.warn('sendWSRBatchToPA error:', err.message);
   }
+}
+
+// Generic fire-and-forget PA batch sender
+function sendBatchToPA(webhookUrl, records, label) {
+  if (!webhookUrl) { console.warn(`${label} webhook not configured`); return; }
+  fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ records }),
+  }).then(r => console.log(`✅ ${label} batch sent: ${records.length} record(s), status ${r.status}`))
+    .catch(err => console.warn(`${label} PA batch failed:`, err.message));
+}
+
+// ── SSR batch: fetch all SSR rows for a rep and send to PA ──
+async function sendSSRBatchToPA(repRecId) {
+  try {
+    const rows = await atListRecords(TBL.subcontractorStockReport, {
+      fields: [
+        'fldzxd5Odt0mpzDW8', // Report Key
+        'fldc33IYWc8kgLdmN', // Full Name
+        'fld0Cyg9IBXd8XXEH', // Company Name
+        'fldPpj5hGp4lbQugL', // OP Code
+        'fldAZUYVyQ5gLWKWk', // IT Code
+        'fld5YH3SMorI6dUFe', // Description
+        'fldkKoXhDLLQwo8np', // Total Stock Received
+        'fld2r0bsneVGQIfnn', // Qty Requested Rollup
+        'fldmqsBzGd05tJlk8', // Total Stock Used
+        'fldkeIz1IRPi8tc9j', // Total Stock Returned
+        'fldpr4nM1K7MkLdEI', // Current Stock On-Hand
+        'fldtl8EaNWqzVVe8O', // Current Stock Requested
+        'fldTqTbr6ysQAimLX', // Rep Record ID (for filtering)
+      ],
+      returnFieldsByFieldId: true,
+    });
+
+    function u(val) { return Array.isArray(val) ? val[0] || '' : val || ''; }
+
+    const records = rows
+      .filter(row => (row.fields['fldTqTbr6ysQAimLX'] || []).includes(repRecId))
+      .map(row => {
+        const f = row.fields;
+        return {
+          reportKey:            u(f['fldzxd5Odt0mpzDW8']),
+          fullName:             u(f['fldc33IYWc8kgLdmN']),
+          companyName:          u(f['fld0Cyg9IBXd8XXEH']),
+          opCode:               u(f['fldPpj5hGp4lbQugL']),
+          itCode:               u(f['fldAZUYVyQ5gLWKWk']),
+          description:          u(f['fld5YH3SMorI6dUFe']),
+          totalStockReceived:   Number(f['fldkKoXhDLLQwo8np']) || 0,
+          totalqtyRequested:    Number(f['fld2r0bsneVGQIfnn']) || 0,
+          totalStockUsed:       Number(f['fldmqsBzGd05tJlk8']) || 0,
+          totalStockReturned:   Number(f['fldkeIz1IRPi8tc9j']) || 0,
+          currentStockOnHand:   Number(f['fldpr4nM1K7MkLdEI']) || 0,
+          currentStockRequested:Number(f['fldtl8EaNWqzVVe8O']) || 0,
+        };
+      });
+
+    if (records.length) sendBatchToPA(PA_SSR_WEBHOOK, records, 'SSR');
+  } catch(err) { console.warn('sendSSRBatchToPA error:', err.message); }
+}
+
+// ── SJR batch: fetch SJR rows for a rep and send to PA ──
+async function sendSJRBatchToPA(repRecId) {
+  try {
+    const rows = await atFetchAll(TBL.subcontractorJobReport, {
+      filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Representative}))`,
+      fields: [
+        'fldXkqr0dATTrcdzV', // Report Key
+        'fldb7YZ77x7vA0ASQ', // Date Installed
+        'fldLRS9CRtPP0AvKd', // Job Code
+        'flddKwtwsYspIqPy0', // Company Name
+        'fldAoLaJ2fPHr9Kax', // Full Name
+        'fldvOMUgG8eY0uzWg', // Email
+        'fld1zKoTmFi7w7CLV', // Mobile
+        'fldMuQy4naImR0Qyf', // OP Code
+        'fldWqgEITuvz4ZmWI', // IT Code
+        'fldfPyfyxPtbIKMoz', // Description
+        'fld9f0dxJZqSaUJp5', // Qty Used
+      ],
+      returnFieldsByFieldId: true,
+    });
+
+    function u(val) { return Array.isArray(val) ? val[0] || '' : val || ''; }
+
+    const records = rows.map(row => {
+      const f = row.fields;
+      return {
+        reportKey:    u(f['fldXkqr0dATTrcdzV']),
+        dateInstalled:u(f['fldb7YZ77x7vA0ASQ']),
+        jobCode:      u(f['fldLRS9CRtPP0AvKd']),
+        companyName:  u(f['flddKwtwsYspIqPy0']),
+        fullName:     u(f['fldAoLaJ2fPHr9Kax']),
+        email:        u(f['fldvOMUgG8eY0uzWg']),
+        mobile:       u(f['fld1zKoTmFi7w7CLV']),
+        opCode:       u(f['fldMuQy4naImR0Qyf']),
+        itCode:       u(f['fldWqgEITuvz4ZmWI']),
+        description:  u(f['fldfPyfyxPtbIKMoz']),
+        qtyUsed:      Number(u(f['fld9f0dxJZqSaUJp5'])) || 0,
+      };
+    });
+
+    if (records.length) sendBatchToPA(PA_SJR_WEBHOOK, records, 'SJR');
+  } catch(err) { console.warn('sendSJRBatchToPA error:', err.message); }
+}
+
+// ── CSR batch: fetch CSR rows for a rep and send to PA ──
+async function sendCSRBatchToPA(repRecId) {
+  try {
+    const rows = await atFetchAll(TBL.contractorReturns, {
+      filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Representative}))`,
+      fields: [
+        'fldqI3bmSJZHkWisC', // Return Key
+        'fldbXwagNxvCXyvu5', // Full Name
+        'fldTfAfgtWmDNp3Rj', // Company (lookup — unwrap)
+        'fldFKYSXDMHSZZrhZ', // OP Code
+        'fldZKjEPcbMSP13f5', // IT Code
+        'fldp94Tjgn4RQLGo4', // Description
+        'fldShHE7UEaWZTGa9', // Warehouse State
+        'fldQC7ffPNwCwyLNT', // Warehouse Location
+        'fldRw8RhxJLWCNHiJ', // Qty Returned
+        'fldRQsRPRPLXpD3yb', // Date Returned
+        'fldiQGRJSEQdJ0QLI', // Notes
+      ],
+      returnFieldsByFieldId: true,
+    });
+
+    // Also need company name — fetch from cache
+    function u(val) { return Array.isArray(val) ? val[0] || '' : val || ''; }
+
+    const records = rows.map(row => {
+      const f = row.fields;
+      // Company is a lookup returning the linked record ID array — get name from cache
+      const compId = u(f['fldTfAfgtWmDNp3Rj']);
+      const compRec = CACHE.subcontractors?.find(r => r.id === compId);
+      const companyName = compRec?.fields?.['Company Name'] || '';
+      return {
+        returnKey:        u(f['fldqI3bmSJZHkWisC']),
+        fullName:         u(f['fldbXwagNxvCXyvu5']),
+        companyName,
+        opCode:           u(f['fldFKYSXDMHSZZrhZ']),
+        itCode:           u(f['fldZKjEPcbMSP13f5']),
+        description:      u(f['fldp94Tjgn4RQLGo4']),
+        warehouseState:   u(f['fldShHE7UEaWZTGa9']),
+        warehouseLocation:u(f['fldQC7ffPNwCwyLNT']),
+        qtyReturned:      Number(f['fldRw8RhxJLWCNHiJ']) || 0,
+        dateReturned:     f['fldRQsRPRPLXpD3yb'] || '',
+        notes:            f['fldiQGRJSEQdJ0QLI'] || '',
+      };
+    });
+
+    if (records.length) sendBatchToPA(PA_CSR_WEBHOOK, records, 'CSR');
+  } catch(err) { console.warn('sendCSRBatchToPA error:', err.message); }
+}
+
+// ── OSR batch: fetch OSR rows for a warehouse and send to PA ──
+async function sendOSRBatchToPA(whLocRecId) {
+  try {
+    const rows = await atFetchAll(TBL.opticommReturns, {
+      filterByFormula: `FIND("${whLocRecId}",ARRAYJOIN({Warehouse}))`,
+      fields: [
+        'flddeVm1RTm3W5A6v', // Return Key
+        'fldkjvu5Q0sEXrUWk', // Warehouse State
+        'fldYQ6cd15ZYrXFBf', // Warehouse Location
+        'fldM6HxsQxete5toC', // OptiComm Warehouse (State & Location)
+        'fldQvBHJpV0DwI7HD', // OP Code
+        'fldZFAs1x0R8IHTAe', // IT Code
+        'fldy9qIs4jM0XWWgX', // Description
+        'fldkyrtQMlDqJ1ibP', // Qty Returned
+        'fldPNWRGXLdFoqbvk', // Date Returned
+        'fldq8NrgtZxci3ubm', // Notes
+      ],
+      returnFieldsByFieldId: true,
+    });
+
+    function u(val) { return Array.isArray(val) ? val[0] || '' : val || ''; }
+
+    const records = rows.map(row => {
+      const f = row.fields;
+      return {
+        returnKey:         u(f['flddeVm1RTm3W5A6v']),
+        warehouseState:    u(f['fldkjvu5Q0sEXrUWk']),
+        warehouseLocation: u(f['fldYQ6cd15ZYrXFBf']),
+        opticommWarehouse: u(f['fldM6HxsQxete5toC']),
+        opCode:            u(f['fldQvBHJpV0DwI7HD']),
+        itCode:            u(f['fldZFAs1x0R8IHTAe']),
+        description:       u(f['fldy9qIs4jM0XWWgX']),
+        qtyReturned:       Number(f['fldkyrtQMlDqJ1ibP']) || 0,
+        dateReturned:      f['fldPNWRGXLdFoqbvk'] || '',
+        notes:             f['fldq8NrgtZxci3ubm'] || '',
+      };
+    });
+
+    if (records.length) sendBatchToPA(PA_OSR_WEBHOOK, records, 'OSR');
+  } catch(err) { console.warn('sendOSRBatchToPA error:', err.message); }
 }
 
 async function atListRecords(tableId, body) {
@@ -1541,6 +1739,10 @@ let wfFoundRecId = null;
           console.log('✅ Date Collected written:', dateCollected);
         }
 
+        // Send WSR and SSR batches to Excel (fire and forget)
+        sendWSRBatchToPA(locRecId, locName, stateName);
+        sendSSRBatchToPA(repRecId);
+
         showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
       } else {
         // === NEW MATERIALS REQUEST ===
@@ -1642,6 +1844,10 @@ let wfFoundRecId = null;
           // Update local cache
           matRec.fields[stockField] = newStock;
         }
+
+        // Send WSR and SSR batches to Excel (fire and forget)
+        sendWSRBatchToPA(locRecId, wfLocName, stateName);
+        sendSSRBatchToPA(repRecId);
 
         showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items). Returning to home screen…`);
       }
@@ -2007,7 +2213,11 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         } catch (sjrErr) { console.warn('SJR write failed:', sjrErr.message); }
       }));
 
-            showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
+            // Send SSR and SJR batches to Excel (fire and forget)
+      sendSSRBatchToPA(repRecId);
+      sendSJRBatchToPA(repRecId);
+
+      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
       
       // Reset form
       this.reset();
@@ -2419,6 +2629,11 @@ function buildOpticommDropdown(sel, selectedState) {
         console.log(`✅ Contractor return: mat ${item.recId}, qty ${item.qty} → ${locationName}`);
       }
 
+      // Send CSR, WSR and SSR batches to Excel (fire and forget)
+      sendCSRBatchToPA(repRecId);
+      sendWSRBatchToPA(whLocRecId, locationName, whCacheRec?.fields?.['State'] || '');
+      sendSSRBatchToPA(repRecId);
+
       showSuccess('cr-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned. Returning to home screen…`);
       this.reset();
       document.getElementById('cr-date').value = todayStr();
@@ -2634,6 +2849,13 @@ async function loadRepInventoryForReturn(repRecId, repName) {
         await atCreateBatch(TBL.opticommReturns, osrBatchFields.slice(i, i + 10));
       }
       console.log(`✅ OptiComm return: ${returnItems.length} item(s) submitted`);
+
+      // Send OSR and WSR batches to Excel (fire and forget)
+      const orWhCacheRec = CACHE.warehouseByRecId[whLocRecId];
+      const orLocationName = orWhCacheRec?.fields?.['Location'] || '';
+      const orStateName = orWhCacheRec?.fields?.['State'] || '';
+      sendOSRBatchToPA(whLocRecId);
+      sendWSRBatchToPA(whLocRecId, orLocationName, orStateName);
 
       showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to OptiComm. Returning to home screen…`);
       this.reset();
