@@ -1576,6 +1576,8 @@ async function loadRequestLineItems(requestId, stockFieldName) {
     });
 
     // Populate and unlock only requested items
+    // Collect material IDs that have qty requested
+    const requestedMatIds = new Set();
     lineItems.forEach(line => {
       const materialId = line.fields['Material'] ? line.fields['Material'][0] : null;
       if (!materialId) return;
@@ -1592,6 +1594,7 @@ async function loadRequestLineItems(requestId, stockFieldName) {
         if (qtyRequested > 0) {
           reqInput.classList.remove('qty-locked');
           reqInput.classList.add('qty-locked-value');
+          requestedMatIds.add(materialId);
         } else {
           reqInput.classList.add('qty-locked');
           reqInput.classList.remove('qty-locked-value');
@@ -1600,11 +1603,28 @@ async function loadRequestLineItems(requestId, stockFieldName) {
 
       if (rcvInput) {
         rcvInput.value = qtyReceived;
-        rcvInput.disabled = false;           // Make editable
-        rcvInput.classList.remove('qty-locked'); // Make white
+        rcvInput.disabled = false;
+        rcvInput.classList.remove('qty-locked');
         console.log(`✅ Activated editable Qty Received for ${materialId} (${qtyRequested} requested)`);
       }
     });
+
+    // Hide rows with no qty requested — only show relevant materials
+    document.querySelectorAll('.wf-req').forEach(inp => {
+      const matId = inp.dataset.record;
+      const row = inp.closest('tr');
+      if (row) {
+        row.style.display = requestedMatIds.has(matId) ? '' : 'none';
+      }
+    });
+
+    // Hide subsection groups that have no visible rows
+    document.querySelectorAll('#wf-subsections .subsection').forEach(sec => {
+      const visibleRows = sec.querySelectorAll('tbody tr:not([style*="display: none"])');
+      sec.style.display = visibleRows.length > 0 ? '' : 'none';
+    });
+
+    console.log(`✅ Showing ${requestedMatIds.size} material(s) with qty requested`);
 
   } catch (err) {
     console.error('Failed to load line items:', err);
