@@ -871,11 +871,16 @@ async function sendSSRBatchToPA(repRecId) {
   } catch(err) { console.warn('sendSSRBatchToPA error:', err.message); }
 }
 
-// ── SJR batch: fetch SJR rows for a rep and send to PA ──
+/// ── SJR batch: fetch SJR rows for a rep and send to PA ──
 async function sendSJRBatchToPA(repRecId) {
   try {
-    const rows = await atFetchAll(TBL.subcontractorJobReport, {
-      filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Representative}))`,
+    const resp = await fetch(
+      `${AT_API}/${AT_BASE}/${TBL.subcontractorJobReport}/listRecords`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Representative}))`,
       fields: [
         'fldXkqr0dATTrcdzV', // Report Key
         'fldb7YZ77x7vA0ASQ', // Date Installed
@@ -890,10 +895,13 @@ async function sendSJRBatchToPA(repRecId) {
         'fld9f0dxJZqSaUJp5', // Qty Used
       ],
       returnFieldsByFieldId: true,
-    });
-
-    function u(val) { return Array.isArray(val) ? val[0] || '' : val || ''; }
-
+        })
+      }
+    );
+    const data = await resp.json();
+    const rows = data.records || [];
+    console.log(`sendSJRBatchToPA: ${rows.length} rows for rep ${repRecId}`);
+    function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
     const records = rows.map(row => {
       const f = row.fields;
       return {
@@ -918,8 +926,13 @@ async function sendSJRBatchToPA(repRecId) {
 // ── CSR batch: fetch CSR rows for a rep and send to PA ──
 async function sendCSRBatchToPA(repRecId) {
   try {
-    const rows = await atFetchAll(TBL.contractorReturns, {
-      filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Representative}))`,
+    const resp = await fetch(
+      `${AT_API}/${AT_BASE}/${TBL.contractorReturns}/listRecords`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `FIND("${repRecId}",ARRAYJOIN({Representative}))`,
       fields: [
         'fldqI3bmSJZHkWisC', // Return Key
         'fldbXwagNxvCXyvu5', // Full Name
@@ -934,32 +947,31 @@ async function sendCSRBatchToPA(repRecId) {
         'fldiQGRJSEQdJ0QLI', // Notes
       ],
       returnFieldsByFieldId: true,
-    });
-
-    // Also need company name — fetch from cache
-    function u(val) { return Array.isArray(val) ? val[0] || '' : val || ''; }
-
+        })
+      }
+    );
+    const data = await resp.json();
+    const rows = data.records || [];
+    console.log(`sendCSRBatchToPA: ${rows.length} rows for rep ${repRecId}`);
+    function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
     const records = rows.map(row => {
       const f = row.fields;
-      // Company is a lookup returning the linked record ID array — get name from cache
       const compId = u(f['fldTfAfgtWmDNp3Rj']);
       const compRec = CACHE.subcontractors?.find(r => r.id === compId);
-      const companyName = compRec?.fields?.['Company Name'] || '';
       return {
-        returnKey:        u(f['fldqI3bmSJZHkWisC']),
-        fullName:         u(f['fldbXwagNxvCXyvu5']),
-        companyName,
-        opCode:           u(f['fldFKYSXDMHSZZrhZ']),
-        itCode:           u(f['fldZKjEPcbMSP13f5']),
-        description:      u(f['fldp94Tjgn4RQLGo4']),
-        warehouseState:   u(f['fldShHE7UEaWZTGa9']),
-        warehouseLocation:u(f['fldQC7ffPNwCwyLNT']),
-        qtyReturned:      Number(f['fldRw8RhxJLWCNHiJ']) || 0,
-        dateReturned:     f['fldRQsRPRPLXpD3yb'] || '',
-        notes:            f['fldiQGRJSEQdJ0QLI'] || '',
+        returnKey:         u(f['fldqI3bmSJZHkWisC']),
+        fullName:          u(f['fldbXwagNxvCXyvu5']),
+        companyName:       compRec?.fields?.['Company Name'] || '',
+        opCode:            u(f['fldFKYSXDMHSZZrhZ']),
+        itCode:            u(f['fldZKjEPcbMSP13f5']),
+        description:       u(f['fldp94Tjgn4RQLGo4']),
+        warehouseState:    u(f['fldShHE7UEaWZTGa9']),
+        warehouseLocation: u(f['fldQC7ffPNwCwyLNT']),
+        qtyReturned:       Number(f['fldRw8RhxJLWCNHiJ']) || 0,
+        dateReturned:      f['fldRQsRPRPLXpD3yb'] || '',
+        notes:             f['fldiQGRJSEQdJ0QLI'] || '',
       };
     });
-
     if (records.length) sendBatchToPA(PA_CSR_WEBHOOK, records, 'CSR');
   } catch(err) { console.warn('sendCSRBatchToPA error:', err.message); }
 }
@@ -967,8 +979,13 @@ async function sendCSRBatchToPA(repRecId) {
 // ── OSR batch: fetch OSR rows for a warehouse and send to PA ──
 async function sendOSRBatchToPA(whLocRecId) {
   try {
-    const rows = await atFetchAll(TBL.opticommReturns, {
-      filterByFormula: `FIND("${whLocRecId}",ARRAYJOIN({Warehouse}))`,
+    const resp = await fetch(
+      `${AT_API}/${AT_BASE}/${TBL.opticommReturns}/listRecords`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `FIND("${whLocRecId}",ARRAYJOIN({Warehouse}))`,
       fields: [
         'flddeVm1RTm3W5A6v', // Return Key
         'fldkjvu5Q0sEXrUWk', // Warehouse State
@@ -982,10 +999,13 @@ async function sendOSRBatchToPA(whLocRecId) {
         'fldq8NrgtZxci3ubm', // Notes
       ],
       returnFieldsByFieldId: true,
-    });
-
-    function u(val) { return Array.isArray(val) ? val[0] || '' : val || ''; }
-
+        })
+      }
+    );
+    const data = await resp.json();
+    const rows = data.records || [];
+    console.log(`sendOSRBatchToPA: ${rows.length} rows for warehouse ${whLocRecId}`);
+    function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
     const records = rows.map(row => {
       const f = row.fields;
       return {
