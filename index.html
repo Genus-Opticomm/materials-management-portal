@@ -539,7 +539,7 @@ const AT_TOKEN = 'patbyyxDeG1vyXDt1.bf541626ff51d7ff78db16476566f413b3fd3159d767
 const AT_BASE  = 'appLWbPBLepjoO6F4';
 
 // ── Power Automate webhook URLs ──────────────────────────────────
-const PA_WSR_WEBHOOK = 'YOUR_WSR_WEBHOOK_URL_HERE'; // Replace with your WSR webhook URL
+const PA_WSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c96971659fa343ba9290c5c8bd51100c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-nLh4hCs_UEsd7DlAOIeNtIAQWI7UqjUPy6dDynjtl8'; // Replace with your WSR webhook URL
 const AT_API   = 'https://api.airtable.com/v0';
 
 const TBL = {
@@ -1388,7 +1388,7 @@ function goBack() {
 
       // Send WSR batch to Excel after delay for rollups to settle (fire and forget)
       const stateVal = stateEl.value;
-      setTimeout(() => sendWSRBatchToPA(locRecId, locationName, stateVal), 8000);
+      setTimeout(() => sendWSRBatchToPA(locRecId, locationName, stateVal), 15000);
 
             showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
       this.reset();
