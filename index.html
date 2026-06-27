@@ -537,6 +537,9 @@
 // ═══════════════════════════════════════════════════
 const AT_TOKEN = 'patbyyxDeG1vyXDt1.bf541626ff51d7ff78db16476566f413b3fd3159d7670838cb27aa2527f754c7';
 const AT_BASE  = 'appLWbPBLepjoO6F4';
+
+// ── Power Automate webhook URLs ──────────────────────────────────
+const PA_WSR_WEBHOOK = 'YOUR_WSR_WEBHOOK_URL_HERE'; // Replace with your WSR webhook URL
 const AT_API   = 'https://api.airtable.com/v0';
 
 const TBL = {
@@ -710,6 +713,84 @@ async function atCreateBatch(tableId, fieldsArray) {
   if (!res.ok) throw new Error(`AT batch create ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return data.records;
+}
+
+// Fetch all WSR rows for a warehouse and send as one batch to Power Automate
+async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
+  if (!PA_WSR_WEBHOOK || PA_WSR_WEBHOOK === 'YOUR_WSR_WEBHOOK_URL_HERE') {
+    console.warn('PA_WSR_WEBHOOK not configured — skipping Excel sync');
+    return;
+  }
+  try {
+    console.log(`sendWSRBatchToPA: fetching WSR for "${locationName}"`);
+    const resp = await fetch(
+      `${AT_API}/${AT_BASE}/${TBL.warehouseStockReport}/listRecords`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `AND(FIND("${stateVal}",ARRAYJOIN({Warehouse State})),FIND("${locationName}",ARRAYJOIN({Warehouse Location})))`,
+          fields: [
+            'fld9CNzC0JV6FgrQ4', // Report Key
+            'fldKtogSlya0m4AOW', // Warehouse State
+            'fldD9D0Mku3AARN2L', // Warehouse Location
+            'fldkGc6ZlyLopCzaL', // Warehouse Manager Name
+            'fldrhZ9di7L69o1NP', // Warehouse Manager Email
+            'fldGU59f9JLc2vq9O', // OP Code
+            'fldqf7cTEt9LW4bmB', // IT Code
+            'fldqayVYTZkJ4cNRR', // Description
+            'fldJJJ5xer1KpiMuQ', // Bin ID
+            'fldszummEzAtmSXxK', // Total Stock Received
+            'fldQmxxDbNVwrEP4I', // Total Stock Collected
+            'fldbEqmnOlnfo6zcz', // Current Stock Requested
+            'fldsvoANNKSpTIyXx', // Total Returned from Contractors
+            'fld28aPzjD3XGbsX3', // Total Returned to OptiComm
+            'fld2Ticr06WS5xSXS', // Current Stock On-Hand
+            'fldjjt4inQZLmGAz7', // Current Stock Available
+          ],
+          returnFieldsByFieldId: true,
+        })
+      }
+    );
+    const data = await resp.json();
+    const rows = data.records || [];
+    console.log(`sendWSRBatchToPA: ${rows.length} WSR rows found for ${locationName}`);
+    if (!rows.length) return;
+
+    function u(val) { return Array.isArray(val) ? val[0] || '' : val || ''; }
+    const payload = rows.map(row => {
+      const f = row.fields;
+      return {
+        reportKey:                    u(f['fld9CNzC0JV6FgrQ4']),
+        state:                        u(f['fldKtogSlya0m4AOW']),
+        warehouseLocation:            u(f['fldD9D0Mku3AARN2L']),
+        warehouseManagerName:         u(f['fldkGc6ZlyLopCzaL']),
+        warehouseManagerEmail:        u(f['fldrhZ9di7L69o1NP']),
+        opCode:                       u(f['fldGU59f9JLc2vq9O']),
+        itCode:                       u(f['fldqf7cTEt9LW4bmB']),
+        description:                  u(f['fldqayVYTZkJ4cNRR']),
+        binID:                        u(f['fldJJJ5xer1KpiMuQ']),
+        totalStockReceived:           Number(f['fldszummEzAtmSXxK']) || 0,
+        totalStockCollected:          Number(f['fldQmxxDbNVwrEP4I']) || 0,
+        currentStockRequested:        Number(f['fldbEqmnOlnfo6zcz']) || 0,
+        totalReturnedFromContractors: Number(f['fldsvoANNKSpTIyXx']) || 0,
+        totalReturnedToOptiComm:      Number(f['fld28aPzjD3XGbsX3']) || 0,
+        currentStockOnHand:           Number(f['fld2Ticr06WS5xSXS']) || 0,
+        currentStockAvailable:        Number(f['fldjjt4inQZLmGAz7']) || 0,
+      };
+    });
+
+    // Fire and forget — don't block the UI
+    fetch(PA_WSR_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ records: payload }),
+    }).then(r => console.log(`✅ WSR batch sent to PA: ${payload.length} record(s), status ${r.status}`))
+      .catch(err => console.warn('WSR PA batch failed:', err.message));
+
+  } catch(err) {
+    console.warn('sendWSRBatchToPA error:', err.message);
+  }
 }
 
 async function atListRecords(tableId, body) {
@@ -1305,6 +1386,10 @@ function goBack() {
       await Promise.all(mqPromises);
       console.log(`✅ Materials Quantities updated`);
 
+      // Send WSR batch to Excel after delay for rollups to settle (fire and forget)
+      const stateVal = stateEl.value;
+      setTimeout(() => sendWSRBatchToPA(locRecId, locationName, stateVal), 8000);
+
             showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
       this.reset();
       document.getElementById('inv-date').value = todayStr();
@@ -1453,6 +1538,83 @@ let wfFoundRecId = null;
           console.log('✅ Date Collected written:', dateCollected);
         }
 
+        // === POPULATE SSR (Subcontractor Stock Report — Collected) ===
+        // Updates SSR Materials Request Lines + back-links MRL Subcontractor Stock Report
+        // This replaces the "SSR: Stock Collected" Airtable automation
+        try {
+          const wfSsrResp2 = await fetch(
+            `${AT_API}/${AT_BASE}/${TBL.subcontractorStockReport}/listRecords`,
+            {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`,
+                fields: [
+                  'fldcyWPxRAxlykWqE', // Materials Request Lines (collected)
+                  'fldXm5gW03QOzBE1P', // Material
+                  'fldTqTbr6ysQAimLX', // Rep Record ID (from Representative)
+                ],
+                returnFieldsByFieldId: true,
+              })
+            }
+          );
+          const wfSsrData2 = await wfSsrResp2.json();
+          const wfSsrRows2 = wfSsrData2.records || [];
+          const ssrByMat2 = {};
+          wfSsrRows2.forEach(row => {
+            const mats = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
+            mats.forEach(matId => { ssrByMat2[matId] = row; });
+          });
+
+          // Get the MRL lines for this request so we know matRecId → mrlId
+          const mrlLineSearch = await atSearchByFormula(
+            TBL.materialsRequestLines,
+            `{Request ID (from Request)}="${reqIDStr}"`
+          );
+
+          // Group by material
+          const mrlByMat2 = {};
+          rcvItems.forEach(item => {
+            const mrlLine = mrlLineSearch.find(l =>
+              l.fields['Material'] && l.fields['Material'][0] === item.recId
+            );
+            if (mrlLine) {
+              if (!mrlByMat2[item.recId]) mrlByMat2[item.recId] = [];
+              mrlByMat2[item.recId].push(mrlLine.id);
+            }
+          });
+
+          const ssrCollPromises = Object.entries(mrlByMat2).map(async ([matRecId, mrlIds]) => {
+            let ssrId;
+            if (ssrByMat2[matRecId]) {
+              const existingColl = (ssrByMat2[matRecId].fields['fldcyWPxRAxlykWqE'] || [])
+                .map(r => r && r.id ? r.id : r);
+              const combined = [...new Set([...existingColl, ...mrlIds])];
+              await atUpdate(TBL.subcontractorStockReport, ssrByMat2[matRecId].id, {
+                'fldcyWPxRAxlykWqE': combined,
+              });
+              ssrId = ssrByMat2[matRecId].id;
+            } else {
+              const newSsr2 = await atCreate(TBL.subcontractorStockReport, {
+                'fldV1yEmErUzd4oFw': [repRecId],
+                'fldXm5gW03QOzBE1P': [matRecId],
+                'fldcyWPxRAxlykWqE': mrlIds,
+              });
+              ssrId = newSsr2.id;
+            }
+            // Back-link MRL → SSR (Subcontractor Stock Report field on MRL)
+            await Promise.all(mrlIds.map(mrlId =>
+              atUpdate(TBL.materialsRequestLines, mrlId, {
+                'fldTQcyZ9Uj6HCHUD': [ssrId], // Subcontractor Stock Report
+              }).catch(e => console.warn('MRL SSR back-link failed:', e.message))
+            ));
+          });
+          await Promise.all(ssrCollPromises);
+          console.log(`✅ SSR (Collected) populated for ${Object.keys(mrlByMat2).length} material(s)`);
+        } catch(ssrCollErr) {
+          console.warn('SSR stock collected population failed:', ssrCollErr.message);
+        }
+
         showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
       } else {
         // === NEW MATERIALS REQUEST ===
@@ -1477,6 +1639,7 @@ let wfFoundRecId = null;
         });
 
         const mainRequestId = newRequest.id;
+        const createdMrlLines = []; // collect { mrlId, matRecId } for SSR population
 
         // === CREATE LINE ITEMS (using Field IDs for safety) ===
         console.log('Creating', reqItems.length, 'line items for request', mainRequestId);
@@ -1492,6 +1655,7 @@ let wfFoundRecId = null;
               'fldM7zHq6l40DxJPR': [item.recId],
               'fldkbdMJjKvi2sp8X': item.qty
             });
+            createdMrlLines.push({ mrlId: lineRecord.id, matRecId: item.recId });
             console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
 
             // Find or create WSR row and link this line to it (both Requested + Collected links)
@@ -1532,6 +1696,77 @@ let wfFoundRecId = null;
           } catch (err) {
             console.error(`❌ Failed to create line item for ${item.recId}:`, err.message);
           }
+        }
+
+        // === POPULATE SSR (Subcontractor Stock Report — Requested) ===
+        // Group created MRL lines by material → find/create SSR row → batch update
+        // This replaces the "SSR: New Request Line" Airtable automation
+        try {
+          // Fetch SSR rows for this rep (filtered — no full table scan)
+          const wfSsrResp = await fetch(
+            `${AT_API}/${AT_BASE}/${TBL.subcontractorStockReport}/listRecords`,
+            {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`,
+                fields: [
+                  'fld9sxRu0sjgTIX5y', // Materials Request Lines (Requested)
+                  'fldXm5gW03QOzBE1P', // Material
+                  'fldTqTbr6ysQAimLX', // Rep Record ID (from Representative)
+                ],
+                returnFieldsByFieldId: true,
+              })
+            }
+          );
+          const wfSsrData = await wfSsrResp.json();
+          const wfSsrRows = wfSsrData.records || [];
+
+          // Build map: materialRecId → ssrRow
+          const ssrByMat = {};
+          wfSsrRows.forEach(row => {
+            const mats = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
+            mats.forEach(matId => { ssrByMat[matId] = row; });
+          });
+
+          // Group created MRL lines by material
+          const mrlByMat = {};
+          createdMrlLines.forEach(({ mrlId, matRecId }) => {
+            if (!mrlByMat[matRecId]) mrlByMat[matRecId] = [];
+            mrlByMat[matRecId].push(mrlId);
+          });
+
+          // For each material: update existing SSR row or create new one
+          // Then back-link SSR → MRL (Subcontractor Stock Report 2 on MRL)
+          const ssrPromises = Object.entries(mrlByMat).map(async ([matRecId, mrlIds]) => {
+            let ssrId;
+            if (ssrByMat[matRecId]) {
+              const existingReq = (ssrByMat[matRecId].fields['fld9sxRu0sjgTIX5y'] || [])
+                .map(r => r && r.id ? r.id : r);
+              const combined = [...new Set([...existingReq, ...mrlIds])];
+              await atUpdate(TBL.subcontractorStockReport, ssrByMat[matRecId].id, {
+                'fld9sxRu0sjgTIX5y': combined,
+              });
+              ssrId = ssrByMat[matRecId].id;
+            } else {
+              const newSsr = await atCreate(TBL.subcontractorStockReport, {
+                'fldV1yEmErUzd4oFw': [repRecId],   // Representative
+                'fldXm5gW03QOzBE1P': [matRecId],   // Material
+                'fld9sxRu0sjgTIX5y': mrlIds,        // Materials Request Lines (Requested)
+              });
+              ssrId = newSsr.id;
+            }
+            // Back-link each MRL to the SSR row (Subcontractor Stock Report 2)
+            await Promise.all(mrlIds.map(mrlId =>
+              atUpdate(TBL.materialsRequestLines, mrlId, {
+                'fldyjWShEvsFhUt6L': [ssrId], // Subcontractor Stock Report 2
+              }).catch(e => console.warn('MRL SSR2 back-link failed:', e.message))
+            ));
+          });
+          await Promise.all(ssrPromises);
+          console.log(`✅ SSR (Requested) populated for ${Object.keys(mrlByMat).length} material(s)`);
+        } catch(ssrErr) {
+          console.warn('SSR new request population failed:', ssrErr.message);
         }
 
         // === RESERVE STOCK (reduce available qty) ===
