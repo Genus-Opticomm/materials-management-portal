@@ -1884,40 +1884,68 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         });
       }
 
-            // 3+4. Fetch SSR once, then write SSR + SJR in parallel per item
-      const repName = document.getElementById('dm-rep').options[document.getElementById('dm-rep').selectedIndex]?.textContent?.trim() || '';
+      // 3+4. Fetch SSR once, group MUL lines by SSR row, then update/create SSR + SJR all in parallel
       const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
         fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
         returnFieldsByFieldId: true,
       });
 
-      await Promise.all(createdUsedLineIds.map(async item => {
-        try {
-          const ssrMatch = allSsrRows.find(row => {
-            const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
-            const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
-            return repLookup.includes(repRecId) && matLinked.includes(item.recId);
-          });
-          if (ssrMatch) {
-            const existingIds = (ssrMatch.fields['fldozoAjUrm312vj9'] || []).map(r => r && r.id ? r.id : r);
-            if (!existingIds.includes(item.lineId)) existingIds.push(item.lineId);
-            await atUpdate('tblAkiFxWxDYV2Alm', ssrMatch.id, { 'fldozoAjUrm312vj9': existingIds });
-          } else {
-            await atCreate('tblAkiFxWxDYV2Alm', {
-              'fldV1yEmErUzd4oFw': [repRecId],
-              'fldXm5gW03QOzBE1P': [item.recId],
-              'fldozoAjUrm312vj9': [item.lineId],
-            });
-          }
-        } catch (ssrErr) { console.warn('SSR write failed:', ssrErr.message); }
+      // Group MUL lines by SSR row — one atUpdate per SSR row, not per MUL line
+      const ssrUpdates = {};   // ssrId → { existingIds[], newLineIds[] }
+      const ssrCreates = [];   // { matRecId, lineIds[] }
 
-        try {
-          await atCreate('tbl5pCmx7a4tpNCNk', {
+      createdUsedLineIds.forEach(item => {
+        const ssrMatch = allSsrRows.find(row => {
+          const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
+          const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
+          return repLookup.includes(repRecId) && matLinked.includes(item.recId);
+        });
+        if (ssrMatch) {
+          if (!ssrUpdates[ssrMatch.id]) {
+            ssrUpdates[ssrMatch.id] = {
+              existingIds: (ssrMatch.fields['fldozoAjUrm312vj9'] || []).map(r => r && r.id ? r.id : r),
+              newLineIds: [],
+            };
+          }
+          if (!ssrUpdates[ssrMatch.id].existingIds.includes(item.lineId) &&
+              !ssrUpdates[ssrMatch.id].newLineIds.includes(item.lineId)) {
+            ssrUpdates[ssrMatch.id].newLineIds.push(item.lineId);
+          }
+        } else {
+          const existing = ssrCreates.find(c => c.matRecId === item.recId);
+          if (existing) {
+            existing.lineIds.push(item.lineId);
+          } else {
+            ssrCreates.push({ matRecId: item.recId, lineIds: [item.lineId] });
+          }
+        }
+      });
+
+      // Fire all SSR updates, SSR creates, and SJR creates in parallel
+      await Promise.all([
+        // One atUpdate per unique SSR row (not per MUL line)
+        ...Object.entries(ssrUpdates).map(([ssrId, { existingIds, newLineIds }]) =>
+          atUpdate(TBL.subcontractorStockReport, ssrId, {
+            'fldozoAjUrm312vj9': [...existingIds, ...newLineIds],
+          }).catch(err => console.warn('SSR update failed:', err.message))
+        ),
+        // Create new SSR rows with all their MUL lines at once
+        ...ssrCreates.map(({ matRecId, lineIds }) =>
+          atCreate(TBL.subcontractorStockReport, {
+            'fldV1yEmErUzd4oFw': [repRecId],
+            'fldXm5gW03QOzBE1P': [matRecId],
+            'fldozoAjUrm312vj9': lineIds,
+          }).catch(err => console.warn('SSR create failed:', err.message))
+        ),
+        // SJR — one per MUL line, all in parallel
+        ...createdUsedLineIds.map(item =>
+          atCreate(TBL.subcontractorJobReport, {
             'fldOsnJEHcWjfe7fV': [repRecId],
             'fldkCo5VFj09XALYv': [item.lineId],
-          });
-        } catch (sjrErr) { console.warn('SJR write failed:', sjrErr.message); }
-      }));
+          }).catch(err => console.warn('SJR create failed:', err.message))
+        ),
+      ]);
+      console.log(`✅ SSR: ${Object.keys(ssrUpdates).length} updated, ${ssrCreates.length} created. SJR: ${createdUsedLineIds.length} created.`);
 
             showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
       
