@@ -1823,25 +1823,16 @@ let wfFoundRecId = null;
             const wfMatRec = CACHE.materials.find(r => r.id === item.recId);
             const wfBinId  = wfMatRec?.fields?.['Bin ID'] || '';
             try {
-              const wfWsrResp = await fetch(
-                `${AT_API}/${AT_BASE}/${TBL.warehouseStockReport}/listRecords`,
-                {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    filterByFormula: `AND(FIND("${wfLocName}",ARRAYJOIN({Warehouse Location})),FIND("${wfBinId}",ARRAYJOIN({Bin ID})))`,
-                    fields: ['fld9CNzC0JV6FgrQ4', 'fldyvmOr9Osm0wZ1U', 'fldNbMU9i8X0wfFV2'],
-                    returnFieldsByFieldId: true,
-                  })
-                }
-              );
-              const wfWsrRows = (await wfWsrResp.json()).records || []
+              const wfWsrRows = await atFetchAll(TBL.warehouseStockReport, {
+                filterByFormula: `AND(FIND("${wfLocName}",ARRAYJOIN({Warehouse Location})),FIND("${wfBinId}",ARRAYJOIN({Bin ID})))`,
+                fields: ['Report Key', 'Materials Request Lines', 'Materials Request Lines (Requested)'],
+              });
               let wfWsrId = null;
               if (wfWsrRows.length > 0) {
                 wfWsrId = wfWsrRows[0].id;
                 // Append this line to both WSR link fields
-                const existingColl = (wfWsrRows[0].fields['fldyvmOr9Osm0wZ1U'] || []).map(r => r && r.id ? r.id : r);
-                const existingReq  = (wfWsrRows[0].fields['fldNbMU9i8X0wfFV2'] || []).map(r => r && r.id ? r.id : r);
+                const existingColl = wfWsrRows[0].fields['Materials Request Lines'] || [];
+                const existingReq  = wfWsrRows[0].fields['Materials Request Lines (Requested)'] || [];
                 await atUpdate(TBL.warehouseStockReport, wfWsrId, {
                   'fldyvmOr9Osm0wZ1U': [...existingColl, lineRecord.id],
                   'fldNbMU9i8X0wfFV2': [...existingReq,  lineRecord.id],
@@ -1890,7 +1881,10 @@ let wfFoundRecId = null;
         }
 
          // Send WSR batch after delay for rollup to settle
-        setTimeout(() => sendWSRBatchToPA(locRecId, wfLocName, stateName), 8000);
+        setTimeout(() => {
+          sendWSRBatchToPA(locRecId, wfLocName, stateName);
+          sendSSRBatchToPA(repRecId);
+        }, 8000);
 
         showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items). Returning to home screen…`);
       }
