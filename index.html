@@ -563,6 +563,7 @@ const TBL = {
   opticommReturns:         'tblO2WV70EcOodGJd',
   opticommWarehouses:      'tblNZyRwHcwMAeKfi',
   subcontractorStockReport:'tblAkiFxWxDYV2Alm',
+  subcontractorJobReport:  'tbl5pCmx7a4tpNCNk',
 };
 
 // Field IDs for key write fields
@@ -2413,15 +2414,18 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         }
       });
 
-      // Fire all SSR updates, SSR creates, and SJR creates in parallel
-      await Promise.all([
-        // One atUpdate per unique SSR row (not per MUL line)
-        ...Object.entries(ssrUpdates).map(([ssrId, { existingIds, newLineIds }]) =>
+      // SSR updates — chunked in groups of 4 to avoid rate limits
+      const ssrUpdateEntries = Object.entries(ssrUpdates);
+      for (let i = 0; i < ssrUpdateEntries.length; i += 4) {
+        await Promise.all(ssrUpdateEntries.slice(i, i + 4).map(([ssrId, { existingIds, newLineIds }]) =>
           atUpdate(TBL.subcontractorStockReport, ssrId, {
             'fldozoAjUrm312vj9': [...existingIds, ...newLineIds],
           }).catch(err => console.warn('SSR update failed:', err.message))
-        ),
-        // Create new SSR rows with all their MUL lines at once
+        ));
+      }
+
+      // SSR creates + SJR creates in parallel (new records, no conflict risk)
+      await Promise.all([
         ...ssrCreates.map(({ matRecId, lineIds }) =>
           atCreate(TBL.subcontractorStockReport, {
             'fldV1yEmErUzd4oFw': [repRecId],
@@ -2429,7 +2433,6 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
             'fldozoAjUrm312vj9': lineIds,
           }).catch(err => console.warn('SSR create failed:', err.message))
         ),
-        // SJR — one per MUL line, all in parallel
         ...createdUsedLineIds.map(item =>
           atCreate(TBL.subcontractorJobReport, {
             'fldOsnJEHcWjfe7fV': [repRecId],
@@ -2437,7 +2440,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
           }).catch(err => console.warn('SJR create failed:', err.message))
         ),
       ]);
-      console.log(`✅ SSR: ${Object.keys(ssrUpdates).length} updated, ${ssrCreates.length} created. SJR: ${createdUsedLineIds.length} created.`);
+      console.log(`✅ SSR: ${ssrUpdateEntries.length} updated, ${ssrCreates.length} created. SJR: ${createdUsedLineIds.length} created.`);
 
             // Send SSR batch to Excel after delay for rollups to settle
       // Send SSR + SJR batches to Excel after delay for rollups to settle
