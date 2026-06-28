@@ -539,7 +539,8 @@ const AT_TOKEN = 'patbyyxDeG1vyXDt1.bf541626ff51d7ff78db16476566f413b3fd3159d767
 const AT_BASE  = 'appLWbPBLepjoO6F4';
 
 // ── Power Automate webhook URLs ──────────────────────────────────
-const PA_WSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c96971659fa343ba9290c5c8bd51100c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-nLh4hCs_UEsd7DlAOIeNtIAQWI7UqjUPy6dDynjtl8'; // Replace with your WSR webhook URL
+const PA_WSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/c96971659fa343ba9290c5c8bd51100c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-nLh4hCs_UEsd7DlAOIeNtIAQWI7UqjUPy6dDynjtl8';
+const PA_SSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6c7551321b01416c8d7a0b6127f58fb0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=7ZhHQogCqtp7a6gp-90tXAiP4whoyVyKyZMVLBXYvL4'; // Replace with your WSR webhook URL
 const AT_API   = 'https://api.airtable.com/v0';
 
 const TBL = {
@@ -790,6 +791,73 @@ async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
 
   } catch(err) {
     console.warn('sendWSRBatchToPA error:', err.message);
+  }
+}
+
+// Fetch SSR rows for a rep and send as one batch to Power Automate
+async function sendSSRBatchToPA(repRecId) {
+  if (!PA_SSR_WEBHOOK) { console.warn('PA_SSR_WEBHOOK not configured'); return; }
+  try {
+    console.log(`sendSSRBatchToPA: fetching SSR for rep ${repRecId}`);
+    const resp = await fetch(
+      `${AT_API}/${AT_BASE}/${TBL.subcontractorStockReport}/listRecords`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`,
+          fields: [
+            'fldzxd5Odt0mpzDW8', // Report Key
+            'fldc33IYWc8kgLdmN', // Full Name (from Representative)
+            'fld0Cyg9IBXd8XXEH', // Company Name (from Representative)
+            'fldPpj5hGp4lbQugL', // OP Code
+            'fldAZUYVyQ5gLWKWk', // IT Code
+            'fld5YH3SMorI6dUFe', // Description
+            'fldkKoXhDLLQwo8np', // Total Stock Received
+            'fld2r0bsneVGQIfnn', // Qty Requested Rollup
+            'fldmqsBzGd05tJlk8', // Total Stock Used
+            'fldkeIz1IRPi8tc9j', // Total Stock Returned
+            'fldpr4nM1K7MkLdEI', // Current Stock On-Hand
+            'fldtl8EaNWqzVVe8O', // Current Stock Requested
+          ],
+          returnFieldsByFieldId: true,
+        })
+      }
+    );
+    const data = await resp.json();
+    const rows = data.records || [];
+    console.log(`sendSSRBatchToPA: ${rows.length} SSR rows found`);
+    if (!rows.length) return;
+
+    function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
+    const payload = rows.map(row => {
+      const f = row.fields;
+      return {
+        reportKey:             u(f['fldzxd5Odt0mpzDW8']),
+        fullName:              u(f['fldc33IYWc8kgLdmN']),
+        companyName:           u(f['fld0Cyg9IBXd8XXEH']),
+        opCode:                u(f['fldPpj5hGp4lbQugL']),
+        itCode:                u(f['fldAZUYVyQ5gLWKWk']),
+        description:           u(f['fld5YH3SMorI6dUFe']),
+        totalStockReceived:    Number(f['fldkKoXhDLLQwo8np']) || 0,
+        totalqtyRequested:     Number(f['fld2r0bsneVGQIfnn']) || 0,
+        totalStockUsed:        Number(f['fldmqsBzGd05tJlk8']) || 0,
+        totalStockReturned:    Number(f['fldkeIz1IRPi8tc9j']) || 0,
+        currentStockOnHand:    Number(f['fldpr4nM1K7MkLdEI']) || 0,
+        currentStockRequested: Number(f['fldtl8EaNWqzVVe8O']) || 0,
+      };
+    });
+
+    // Fire and forget
+    fetch(PA_SSR_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ records: payload }),
+    }).then(r => console.log(`✅ SSR batch sent to PA: ${payload.length} record(s), status ${r.status}`))
+      .catch(err => console.warn('SSR PA batch failed:', err.message));
+
+  } catch(err) {
+    console.warn('sendSSRBatchToPA error:', err.message);
   }
 }
 
@@ -1615,6 +1683,9 @@ let wfFoundRecId = null;
           console.warn('SSR stock collected population failed:', ssrCollErr.message);
         }
 
+        // Send SSR batch to Excel after delay for rollups to settle
+        setTimeout(() => sendSSRBatchToPA(repRecId), 8000);
+
         showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
       } else {
         // === NEW MATERIALS REQUEST ===
@@ -1789,6 +1860,9 @@ let wfFoundRecId = null;
           // Update local cache
           matRec.fields[stockField] = newStock;
         }
+
+        // Send SSR batch to Excel after delay for rollups to settle
+        setTimeout(() => sendSSRBatchToPA(repRecId), 8000);
 
         showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items). Returning to home screen…`);
       }
@@ -2182,7 +2256,10 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       ]);
       console.log(`✅ SSR: ${Object.keys(ssrUpdates).length} updated, ${ssrCreates.length} created. SJR: ${createdUsedLineIds.length} created.`);
 
-            showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
+            // Send SSR batch to Excel after delay for rollups to settle
+      setTimeout(() => sendSSRBatchToPA(repRecId), 8000);
+
+      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
       
       // Reset form
       this.reset();
@@ -2593,6 +2670,9 @@ function buildOpticommDropdown(sel, selectedState) {
         await atCreate(TBL.contractorReturns, csrFields);
         console.log(`✅ Contractor return: mat ${item.recId}, qty ${item.qty} → ${locationName}`);
       }
+
+      // Send SSR batch to Excel after delay for rollups to settle
+      setTimeout(() => sendSSRBatchToPA(repRecId), 8000);
 
       showSuccess('cr-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned. Returning to home screen…`);
       this.reset();
