@@ -921,11 +921,15 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
       };
     });
 
+    console.log(`sendSJRBatchToPA: sending ${payload.length} record(s) to PA...`);
+    console.log('SJR webhook URL:', PA_SJR_WEBHOOK ? PA_SJR_WEBHOOK.substring(0, 80) + '...' : 'NOT SET');
     fetch(PA_SJR_WEBHOOK, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ records: payload }),
-    }).then(r => console.log(`✅ SJR batch sent: ${payload.length} record(s), status ${r.status}`))
-      .catch(err => console.warn('SJR PA batch failed:', err.message));
+    }).then(async r => {
+      const txt = await r.text().catch(() => '');
+      console.log(`✅ SJR batch sent: ${payload.length} record(s), status ${r.status}`, txt ? txt.substring(0,200) : '');
+    }).catch(err => console.warn('SJR PA batch failed:', err.message, err));
   } catch(err) { console.warn('sendSJRBatchToPA error:', err.message); }
 }
 
