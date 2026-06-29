@@ -921,15 +921,11 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
       };
     });
 
-    console.log(`sendSJRBatchToPA: sending ${payload.length} record(s) to PA...`);
-    console.log('SJR webhook URL:', PA_SJR_WEBHOOK ? PA_SJR_WEBHOOK.substring(0, 80) + '...' : 'NOT SET');
     fetch(PA_SJR_WEBHOOK, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ records: payload }),
-    }).then(async r => {
-      const txt = await r.text().catch(() => '');
-      console.log(`✅ SJR batch sent: ${payload.length} record(s), status ${r.status}`, txt ? txt.substring(0,200) : '');
-    }).catch(err => console.warn('SJR PA batch failed:', err.message, err));
+    }).then(r => console.log(`✅ SJR batch sent: ${payload.length} record(s), status ${r.status}`))
+      .catch(err => console.warn('SJR PA batch failed:', err.message));
   } catch(err) { console.warn('sendSJRBatchToPA error:', err.message); }
 }
 
@@ -2423,38 +2419,50 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       });
 
       // Fire all SSR updates, SSR creates, and SJR creates in parallel
-      await Promise.all([
-        // One atUpdate per unique SSR row (not per MUL line)
-        ...Object.entries(ssrUpdates).map(([ssrId, { existingIds, newLineIds }]) =>
+      // SSR updates — chunked in groups of 4 to avoid rate limits
+      const ssrUpdateEntries = Object.entries(ssrUpdates);
+      for (let i = 0; i < ssrUpdateEntries.length; i += 4) {
+        await Promise.all(ssrUpdateEntries.slice(i, i + 4).map(([ssrId, { existingIds, newLineIds }]) =>
           atUpdate(TBL.subcontractorStockReport, ssrId, {
             'fldozoAjUrm312vj9': [...existingIds, ...newLineIds],
           }).catch(err => console.warn('SSR update failed:', err.message))
-        ),
-        // Create new SSR rows with all their MUL lines at once
-        ...ssrCreates.map(({ matRecId, lineIds }) =>
+        ));
+      }
+
+      // SSR creates — chunked in groups of 4
+      for (let i = 0; i < ssrCreates.length; i += 4) {
+        await Promise.all(ssrCreates.slice(i, i + 4).map(({ matRecId, lineIds }) =>
           atCreate(TBL.subcontractorStockReport, {
             'fldV1yEmErUzd4oFw': [repRecId],
             'fldXm5gW03QOzBE1P': [matRecId],
             'fldozoAjUrm312vj9': lineIds,
           }).catch(err => console.warn('SSR create failed:', err.message))
-        ),
-        // SJR — one per MUL line, all in parallel
-        ...createdUsedLineIds.map(item =>
-          atCreate(TBL.subcontractorJobReport, {
-            'fldOsnJEHcWjfe7fV': [repRecId],
-            'fldkCo5VFj09XALYv': [item.lineId],
-          }).catch(err => console.warn('SJR create failed:', err.message))
-        ),
-      ]);
-      console.log(`✅ SSR: ${Object.keys(ssrUpdates).length} updated, ${ssrCreates.length} created. SJR: ${createdUsedLineIds.length} created.`);
+        ));
+      }
+
+      // SJR creates — chunked in groups of 4, track successful MUL IDs for PA batch
+      const createdSjrMulIds = [];
+      for (let i = 0; i < createdUsedLineIds.length; i += 4) {
+        await Promise.all(createdUsedLineIds.slice(i, i + 4).map(async item => {
+          try {
+            await atCreate(TBL.subcontractorJobReport, {
+              'fldOsnJEHcWjfe7fV': [repRecId],
+              'fldkCo5VFj09XALYv': [item.lineId],
+            });
+            createdSjrMulIds.push(item.lineId);
+          } catch(err) {
+            console.warn('SJR create failed:', err.message);
+          }
+        }));
+      }
+      console.log(`✅ SSR: ${ssrUpdateEntries.length} updated, ${ssrCreates.length} created. SJR: ${createdSjrMulIds.length} created.`);
 
             // Send SSR batch to Excel after delay for rollups to settle
       // Send SSR + SJR batches to Excel after delay for rollups to settle
       // Collect MUL line IDs for SJR filter
-      const dmMulIds = createdUsedLineIds.map(item => item.lineId);
       setTimeout(() => {
         sendSSRBatchToPA(repRecId);
-        sendSJRBatchToPA(repRecId, dmMulIds);
+        sendSJRBatchToPA(repRecId, createdSjrMulIds);
       }, 8000);
 
       showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
