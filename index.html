@@ -942,6 +942,8 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
 
 // Fetch CSR rows for a rep and send as one batch to Power Automate
 async function sendCSRBatchToPA(repRecId) {
+  console.log('sendCSRBatchToPA: called for rep', repRecId);
+  console.log('sendCSRBatchToPA: webhook set?', !!PA_CSR_WEBHOOK);
   if (!PA_CSR_WEBHOOK) { console.warn('PA_CSR_WEBHOOK not configured'); return; }
   try {
     const resp = await fetch(
@@ -990,11 +992,14 @@ async function sendCSRBatchToPA(repRecId) {
         notes:             f['fldiQGRJSEQdJ0QLI'] || '',
       };
     });
+    console.log(`sendCSRBatchToPA: sending ${payload.length} record(s) to PA`);
     fetch(PA_CSR_WEBHOOK, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ records: payload }),
-    }).then(r => console.log(`✅ CSR batch sent: ${payload.length} record(s), status ${r.status}`))
-      .catch(err => console.warn('CSR PA batch failed:', err.message));
+    }).then(async r => {
+      const txt = await r.text().catch(() => '');
+      console.log(`✅ CSR batch sent: ${payload.length} record(s), status ${r.status}`, txt ? txt.substring(0,200) : '');
+    }).catch(err => console.warn('CSR PA batch failed:', err.message, err));
   } catch(err) { console.warn('sendCSRBatchToPA error:', err.message); }
 }
 
