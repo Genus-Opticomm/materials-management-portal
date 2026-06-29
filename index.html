@@ -869,38 +869,55 @@ async function sendSSRBatchToPA(repRecId) {
 async function sendSJRBatchToPA(repRecId, mulIds) {
   if (!PA_SJR_WEBHOOK) { console.warn('PA_SJR_WEBHOOK not configured'); return; }
   try {
-    // Filter by the MUL line IDs we just created — avoids linked record FIND issues
-    const mulFilter = mulIds && mulIds.length
-      ? `OR(${mulIds.map(id => `FIND("${id}", ARRAYJOIN({Materials Used Line}))`).join(',')})`
-      : `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`;
-    console.log(`sendSJRBatchToPA: fetching SJR for ${mulIds?.length || 0} MUL line(s)`);
-    const resp = await fetch(
-      `${AT_API}/${AT_BASE}/${TBL.subcontractorJobReport}/listRecords`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filterByFormula: mulFilter,
-          fields: [
-            'fldXkqr0dATTrcdzV', // Report Key
-            'fldb7YZ77x7vA0ASQ', // Date Installed
-            'fldLRS9CRtPP0AvKd', // Job Code
-            'flddKwtwsYspIqPy0', // Company Name
-            'fldAoLaJ2fPHr9Kax', // Full Name
-            'fldvOMUgG8eY0uzWg', // Email
-            'fld1zKoTmFi7w7CLV', // Mobile
-            'fldMuQy4naImR0Qyf', // OP Code
-            'fldWqgEITuvz4ZmWI', // IT Code
-            'fldfPyfyxPtbIKMoz', // Description
-            'fld9f0dxJZqSaUJp5', // Qty Used
-          ],
-          returnFieldsByFieldId: true,
+    // Fetch ALL SJR records (no filter) and match client-side by record ID
+    // Airtable doesn't support filtering by linked record field IDs in filterByFormula
+    console.log(`sendSJRBatchToPA: fetching all SJR records, will match ${mulIds?.length || 0} MUL line(s) client-side`);
+    const mulIdSet = new Set(mulIds || []);
+    let allSjrRows = [];
+    let offset = null;
+    do {
+      const body = {
+        fields: [
+          'fldXkqr0dATTrcdzV', // Report Key
+          'fldb7YZ77x7vA0ASQ', // Date Installed
+          'fldLRS9CRtPP0AvKd', // Job Code
+          'flddKwtwsYspIqPy0', // Company Name
+          'fldAoLaJ2fPHr9Kax', // Full Name
+          'fldvOMUgG8eY0uzWg', // Email
+          'fld1zKoTmFi7w7CLV', // Mobile
+          'fldMuQy4naImR0Qyf', // OP Code
+          'fldWqgEITuvz4ZmWI', // IT Code
+          'fldfPyfyxPtbIKMoz', // Description
+          'fld9f0dxJZqSaUJp5', // Qty Used
+          'fldkCo5VFj09XALYv', // Materials Used Line (for client-side matching)
+        ],
+        returnFieldsByFieldId: true,
+        pageSize: 100,
+      };
+      if (offset) body.offset = offset;
+      const resp = await fetch(
+        `${AT_API}/${AT_BASE}/${TBL.subcontractorJobReport}/listRecords`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        }
+      );
+      const data = await resp.json();
+      allSjrRows = allSjrRows.concat(data.records || []);
+      offset = data.offset || null;
+    } while (offset);
+
+    // Filter client-side: keep rows whose Materials Used Line matches one of our MUL IDs
+    const rows = mulIdSet.size
+      ? allSjrRows.filter(row => {
+          const linked = (row.fields['fldkCo5VFj09XALYv'] || []);
+          const linkedIds = linked.map(l => l && l.id ? l.id : l);
+          return linkedIds.some(id => mulIdSet.has(id));
         })
-      }
-    );
-    const data = await resp.json();
-    const rows = data.records || [];
-    console.log(`sendSJRBatchToPA: ${rows.length} SJR rows found`);
+      : allSjrRows;
+
+    console.log(`sendSJRBatchToPA: ${allSjrRows.length} total SJR rows, ${rows.length} matched`);
     if (!rows.length) return;
 
     function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
@@ -2419,50 +2436,38 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       });
 
       // Fire all SSR updates, SSR creates, and SJR creates in parallel
-      // SSR updates — chunked in groups of 4 to avoid rate limits
-      const ssrUpdateEntries = Object.entries(ssrUpdates);
-      for (let i = 0; i < ssrUpdateEntries.length; i += 4) {
-        await Promise.all(ssrUpdateEntries.slice(i, i + 4).map(([ssrId, { existingIds, newLineIds }]) =>
+      await Promise.all([
+        // One atUpdate per unique SSR row (not per MUL line)
+        ...Object.entries(ssrUpdates).map(([ssrId, { existingIds, newLineIds }]) =>
           atUpdate(TBL.subcontractorStockReport, ssrId, {
             'fldozoAjUrm312vj9': [...existingIds, ...newLineIds],
           }).catch(err => console.warn('SSR update failed:', err.message))
-        ));
-      }
-
-      // SSR creates — chunked in groups of 4
-      for (let i = 0; i < ssrCreates.length; i += 4) {
-        await Promise.all(ssrCreates.slice(i, i + 4).map(({ matRecId, lineIds }) =>
+        ),
+        // Create new SSR rows with all their MUL lines at once
+        ...ssrCreates.map(({ matRecId, lineIds }) =>
           atCreate(TBL.subcontractorStockReport, {
             'fldV1yEmErUzd4oFw': [repRecId],
             'fldXm5gW03QOzBE1P': [matRecId],
             'fldozoAjUrm312vj9': lineIds,
           }).catch(err => console.warn('SSR create failed:', err.message))
-        ));
-      }
-
-      // SJR creates — chunked in groups of 4, track successful MUL IDs for PA batch
-      const createdSjrMulIds = [];
-      for (let i = 0; i < createdUsedLineIds.length; i += 4) {
-        await Promise.all(createdUsedLineIds.slice(i, i + 4).map(async item => {
-          try {
-            await atCreate(TBL.subcontractorJobReport, {
-              'fldOsnJEHcWjfe7fV': [repRecId],
-              'fldkCo5VFj09XALYv': [item.lineId],
-            });
-            createdSjrMulIds.push(item.lineId);
-          } catch(err) {
-            console.warn('SJR create failed:', err.message);
-          }
-        }));
-      }
-      console.log(`✅ SSR: ${ssrUpdateEntries.length} updated, ${ssrCreates.length} created. SJR: ${createdSjrMulIds.length} created.`);
+        ),
+        // SJR — one per MUL line, all in parallel
+        ...createdUsedLineIds.map(item =>
+          atCreate(TBL.subcontractorJobReport, {
+            'fldOsnJEHcWjfe7fV': [repRecId],
+            'fldkCo5VFj09XALYv': [item.lineId],
+          }).catch(err => console.warn('SJR create failed:', err.message))
+        ),
+      ]);
+      console.log(`✅ SSR: ${Object.keys(ssrUpdates).length} updated, ${ssrCreates.length} created. SJR: ${createdUsedLineIds.length} created.`);
 
             // Send SSR batch to Excel after delay for rollups to settle
       // Send SSR + SJR batches to Excel after delay for rollups to settle
       // Collect MUL line IDs for SJR filter
+      const dmMulIds = createdUsedLineIds.map(item => item.lineId);
       setTimeout(() => {
         sendSSRBatchToPA(repRecId);
-        sendSJRBatchToPA(repRecId, createdSjrMulIds);
+        sendSJRBatchToPA(repRecId, dmMulIds);
       }, 8000);
 
       showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
