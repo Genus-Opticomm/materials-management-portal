@@ -942,39 +942,47 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
 
 // Fetch CSR rows for a rep and send as one batch to Power Automate
 async function sendCSRBatchToPA(repRecId) {
-  console.log('sendCSRBatchToPA: called for rep', repRecId);
-  console.log('sendCSRBatchToPA: webhook set?', !!PA_CSR_WEBHOOK);
   if (!PA_CSR_WEBHOOK) { console.warn('PA_CSR_WEBHOOK not configured'); return; }
   try {
-    const resp = await fetch(
-      `${AT_API}/${AT_BASE}/${TBL.contractorReturns}/listRecords`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Representative}))`,
-          fields: [
-            'fldqI3bmSJZHkWisC', // Return Key
-            'fldbXwagNxvCXyvu5', // Full Name (from Representative)
-            'fldTfAfgtWmDNp3Rj', // Company (from Representative)
-            'fldFKYSXDMHSZZrhZ', // OP Code (from Material)
-            'fldZKjEPcbMSP13f5', // IT Code (from Material)
-            'fldp94Tjgn4RQLGo4', // Description (from Material)
-            'fldShHE7UEaWZTGa9', // State (from Warehouse)
-            'fldQC7ffPNwCwyLNT', // Location (from Warehouse)
-            'fldRw8RhxJLWCNHiJ', // Qty Returned
-            'fldRQsRPRPLXpD3yb', // Date Returned
-            'fldiQGRJSEQdJ0QLI', // Notes
-          ],
-          returnFieldsByFieldId: true,
-        })
-      }
-    );
-    const data = await resp.json();
-    const rows = data.records || [];
-    if (!rows.length) return;
+    // Fetch all CSR rows and filter client-side by rep — linked record FIND unreliable
+    console.log(`sendCSRBatchToPA: fetching all CSR rows, filtering by rep ${repRecId} client-side`);
+    let allCsrRows = [];
+    let offset = null;
+    do {
+      const body = {
+        fields: [
+          'fldqI3bmSJZHkWisC', // Return Key
+          'fldbXwagNxvCXyvu5', // Full Name (from Representative)
+          'fldTfAfgtWmDNp3Rj', // Company (from Representative)
+          'fldFKYSXDMHSZZrhZ', // OP Code (from Material)
+          'fldZKjEPcbMSP13f5', // IT Code (from Material)
+          'fldp94Tjgn4RQLGo4', // Description (from Material)
+          'fldShHE7UEaWZTGa9', // State (from Warehouse)
+          'fldQC7ffPNwCwyLNT', // Location (from Warehouse)
+          'fldRw8RhxJLWCNHiJ', // Qty Returned
+          'fldRQsRPRPLXpD3yb', // Date Returned
+          'fldiQGRJSEQdJ0QLI', // Notes
+          'fldRepRecordIdField', // Representative (linked — for client-side filter)
+        ],
+        returnFieldsByFieldId: true,
+        pageSize: 100,
+      };
+      if (offset) body.offset = offset;
+      const resp = await fetch(
+        `${AT_API}/${AT_BASE}/${TBL.contractorReturns}/listRecords`,
+        { method: 'POST', headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+      );
+      const data = await resp.json();
+      if (data.error) { console.warn('CSR fetch error:', JSON.stringify(data.error)); break; }
+      allCsrRows = allCsrRows.concat(data.records || []);
+      offset = data.offset || null;
+    } while (offset);
+
+    console.log(`sendCSRBatchToPA: ${allCsrRows.length} total CSR rows fetched`);
+    if (!allCsrRows.length) return;
+
     function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
-    const payload = rows.map(row => {
+    const payload = allCsrRows.map(row => {
       const f = row.fields;
       const compId = u(f['fldTfAfgtWmDNp3Rj']);
       const compRec = CACHE.subcontractors?.find(r => r.id === compId);
@@ -992,6 +1000,7 @@ async function sendCSRBatchToPA(repRecId) {
         notes:             f['fldiQGRJSEQdJ0QLI'] || '',
       };
     });
+
     console.log(`sendCSRBatchToPA: sending ${payload.length} record(s) to PA`);
     fetch(PA_CSR_WEBHOOK, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -999,42 +1008,51 @@ async function sendCSRBatchToPA(repRecId) {
     }).then(async r => {
       const txt = await r.text().catch(() => '');
       console.log(`✅ CSR batch sent: ${payload.length} record(s), status ${r.status}`, txt ? txt.substring(0,200) : '');
-    }).catch(err => console.warn('CSR PA batch failed:', err.message, err));
-  } catch(err) { console.warn('sendCSRBatchToPA error:', err.message); }
+    }).catch(err => console.warn('CSR PA batch failed:', err.message));
+  } catch(err) { console.warn('sendCSRBatchToPA error:', err.message, err); }
 }
 
 // Fetch OSR rows for a warehouse and send as one batch to Power Automate
 async function sendOSRBatchToPA(whLocRecId) {
   if (!PA_OSR_WEBHOOK) { console.warn('PA_OSR_WEBHOOK not configured'); return; }
   try {
-    const resp = await fetch(
-      `${AT_API}/${AT_BASE}/${TBL.opticommReturns}/listRecords`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filterByFormula: `FIND("${whLocRecId}", ARRAYJOIN({Warehouse}))`,
-          fields: [
-            'flddeVm1RTm3W5A6v', // Return Key
-            'fldkjvu5Q0sEXrUWk', // State (from Warehouse)
-            'fldYQ6cd15ZYrXFBf', // Location (from Warehouse)
-            'fldM6HxsQxete5toC', // Location (from OptiComm Warehouse)
-            'fldQvBHJpV0DwI7HD', // OP Code (from Material)
-            'fldZFAs1x0R8IHTAe', // IT Code (from Material)
-            'fldy9qIs4jM0XWWgX', // Description (from Material)
-            'fldkyrtQMlDqJ1ibP', // Qty Returned
-            'fldPNWRGXLdFoqbvk', // Date Returned
-            'fldq8NrgtZxci3ubm', // Notes
-          ],
-          returnFieldsByFieldId: true,
-        })
-      }
-    );
-    const data = await resp.json();
-    const rows = data.records || [];
-    if (!rows.length) return;
+    // Fetch all OSR rows — linked record FIND unreliable, send full table to PA
+    console.log(`sendOSRBatchToPA: fetching all OSR rows`);
+    let allOsrRows = [];
+    let offset = null;
+    do {
+      const body = {
+        fields: [
+          'flddeVm1RTm3W5A6v', // Return Key
+          'fldkjvu5Q0sEXrUWk', // State (from Warehouse)
+          'fldYQ6cd15ZYrXFBf', // Location (from Warehouse)
+          'fldM6HxsQxete5toC', // Location (from OptiComm Warehouse)
+          'fldQvBHJpV0DwI7HD', // OP Code (from Material)
+          'fldZFAs1x0R8IHTAe', // IT Code (from Material)
+          'fldy9qIs4jM0XWWgX', // Description (from Material)
+          'fldkyrtQMlDqJ1ibP', // Qty Returned
+          'fldPNWRGXLdFoqbvk', // Date Returned
+          'fldq8NrgtZxci3ubm', // Notes
+        ],
+        returnFieldsByFieldId: true,
+        pageSize: 100,
+      };
+      if (offset) body.offset = offset;
+      const resp = await fetch(
+        `${AT_API}/${AT_BASE}/${TBL.opticommReturns}/listRecords`,
+        { method: 'POST', headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+      );
+      const data = await resp.json();
+      if (data.error) { console.warn('OSR fetch error:', JSON.stringify(data.error)); break; }
+      allOsrRows = allOsrRows.concat(data.records || []);
+      offset = data.offset || null;
+    } while (offset);
+
+    console.log(`sendOSRBatchToPA: ${allOsrRows.length} total OSR rows fetched`);
+    if (!allOsrRows.length) return;
+
     function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
-    const payload = rows.map(row => {
+    const payload = allOsrRows.map(row => {
       const f = row.fields;
       return {
         returnKey:         u(f['flddeVm1RTm3W5A6v']),
@@ -1049,12 +1067,16 @@ async function sendOSRBatchToPA(whLocRecId) {
         notes:             f['fldq8NrgtZxci3ubm'] || '',
       };
     });
+
+    console.log(`sendOSRBatchToPA: sending ${payload.length} record(s) to PA`);
     fetch(PA_OSR_WEBHOOK, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ records: payload }),
-    }).then(r => console.log(`✅ OSR batch sent: ${payload.length} record(s), status ${r.status}`))
-      .catch(err => console.warn('OSR PA batch failed:', err.message));
-  } catch(err) { console.warn('sendOSRBatchToPA error:', err.message); }
+    }).then(async r => {
+      const txt = await r.text().catch(() => '');
+      console.log(`✅ OSR batch sent: ${payload.length} record(s), status ${r.status}`, txt ? txt.substring(0,200) : '');
+    }).catch(err => console.warn('OSR PA batch failed:', err.message));
+  } catch(err) { console.warn('sendOSRBatchToPA error:', err.message, err); }
 }
 
 async function atListRecords(tableId, body) {
