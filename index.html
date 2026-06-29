@@ -123,7 +123,12 @@
     @keyframes spin { to{transform:rotate(360deg)} }
     .success-banner { display:none; padding:1rem 1.25rem; background:#d4edda; border:1px solid #c3e6cb; color:#155724; border-radius:.5rem; margin-bottom:1rem; font-weight:600; }
     @media(max-width:600px){ .container{margin:-30px 1rem 40px;padding:1.25rem} .field-grid{grid-template-columns:1fr} .form-footer{flex-direction:column} .btn{width:100%;text-align:center} }
-  </style>
+  
+  /* Patience notice shown during form submission */
+  .patience-notice { display:none; padding:.75rem 1rem; background:var(--accent-05); border:1px solid var(--accent-20); border-radius:.5rem; margin-bottom:1rem; font-size:.88rem; color:var(--primary-mid); }
+  .patience-notice.visible { display: block; }
+
+</style>
   <link rel="icon" href="favicon.png" type="image/png">
 </head>
 <body>
@@ -189,6 +194,7 @@
         <div class="subsections" id="inv-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <div id="inv-patience" class="patience-notice">⏳ Please be patient. Stay on this page and don't refresh until the submission is complete.</div>
           <button type="submit" class="btn btn-submit" id="inv-submitBtn">Submit</button>
         </div>
       </form>
@@ -255,6 +261,7 @@
         <div class="subsections" id="wf-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <div id="wf-patience" class="patience-notice">⏳ Please be patient. Stay on this page and don't refresh until the submission is complete.</div>
           <button type="submit" class="btn btn-submit" id="wf-submitBtn">Submit Request</button>
         </div>
       </form>
@@ -304,6 +311,7 @@
         <div class="subsections" id="dm-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <div id="dm-patience" class="patience-notice">⏳ Please be patient. Stay on this page and don't refresh until the submission is complete.</div>
           <button type="submit" class="btn btn-submit" id="dm-submitBtn">Submit Daily Record</button>
         </div>
       </form>
@@ -437,6 +445,7 @@
         </div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <div id="bog-patience" class="patience-notice">⏳ Please be patient. Stay on this page and don't refresh until the submission is complete.</div>
           <button type="submit" class="btn btn-submit" id="bog-submitBtn">Submit BOG</button>
         </div>
       </form>
@@ -482,6 +491,7 @@
         <div class="subsections" id="cr-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <div id="cr-patience" class="patience-notice">⏳ Please be patient. Stay on this page and don't refresh until the submission is complete.</div>
           <button type="submit" class="btn btn-submit" id="cr-submitBtn">Submit Return</button>
         </div>
       </form>
@@ -522,6 +532,7 @@
         <div class="subsections" id="or-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <div id="or-patience" class="patience-notice">⏳ Please be patient. Stay on this page and don't refresh until the submission is complete.</div>
           <button type="submit" class="btn btn-submit" id="or-submitBtn">Submit Return</button>
         </div>
       </form>
@@ -1447,6 +1458,20 @@ function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+function showPatience(formId) {
+  const el = document.getElementById(formId + '-patience');
+  if (el) el.classList.add('visible');
+  // Disable submit button
+  const btn = document.getElementById(formId + '-submitBtn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+}
+function hidePatience(formId) {
+  const el = document.getElementById(formId + '-patience');
+  if (el) el.classList.remove('visible');
+  const btn = document.getElementById(formId + '-submitBtn');
+  if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+}
+
 function showSuccess(bannerId, msg) {
   const el = document.getElementById(bannerId);
   el.textContent = msg; el.style.display = 'block';
@@ -1573,6 +1598,7 @@ function goBack() {
 
   document.getElementById('formInventory').addEventListener('submit', async function(e) {
     e.preventDefault();
+    showPatience('inv');
     let ok = true;
     if (!validateSel('inv-state',   'invgrp-state'))    ok = false;
     if (!validateSel('inv-location','invgrp-location'))  ok = false;
@@ -1675,7 +1701,8 @@ function goBack() {
       const stateVal = stateEl.value;
       setTimeout(() => sendWSRBatchToPA(locRecId, locationName, stateVal), 15000);
 
-            showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
+            hidePatience('inv');
+      showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
       this.reset();
       document.getElementById('inv-date').value = todayStr();
       buildStateDropdown(stateEl);
@@ -1730,6 +1757,7 @@ let wfFoundRecId = null;
 
   document.getElementById('formWorkforce').addEventListener('submit', async function(e) {
     e.preventDefault();
+    showPatience('wf');
     let ok = true;
     if (!validateSel('wf-company',  'wfgrp-company'))  ok = false;
     if (!validateSel('wf-rep',      'wfgrp-rep'))      ok = false;
@@ -1907,7 +1935,8 @@ let wfFoundRecId = null;
           sendWSRBatchToPA(locRecId, locName, stateName);
         }, 8000);
 
-        showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
+        hidePatience('wf');
+      showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
       } else {
         // === NEW MATERIALS REQUEST ===
         const reqItems = [];
@@ -2362,6 +2391,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
 
 document.getElementById('formDaily').addEventListener('submit', async function(e) {
     e.preventDefault();
+    showPatience('dm');
     let ok = true;
     if (!validateSel('dm-company', 'dmgrp-company')) ok = false;
     if (!validateSel('dm-rep',     'dmgrp-rep'))     ok = false;
@@ -2499,6 +2529,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         sendSJRBatchToPA(repRecId, createdSjrMulIds);
       }, 20000);
 
+      hidePatience('dm');
       showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
       
       // Reset form
@@ -2708,6 +2739,7 @@ document.getElementById('bog-demob').addEventListener('change', function() { if(
 
 document.getElementById('formBog').addEventListener('submit', async function(e) {
   e.preventDefault();
+  showPatience('bog');
   const isMob = document.getElementById('bog-mob').checked;
   if (!isMob) {
     const checked = document.querySelectorAll('input[name="bog-swms"]:checked');
@@ -2753,6 +2785,7 @@ document.getElementById('formBog').addEventListener('submit', async function(e) 
     }
 
     await atCreate(TBL.bog, fields);
+    hidePatience('bog');
     alert(`✔ BOG submitted successfully!\n\nCompany: ${fields['Your Company Name']}\nDate: ${fields['Date On-Site']}\nStart: ${hour}:${mins} ${ampm}`);
     this.reset();
     document.getElementById('bog-date').value = todayStr();
@@ -2822,6 +2855,7 @@ function buildOpticommDropdown(sel, selectedState) {
 
   document.getElementById('formContractorReturn').addEventListener('submit', async function(e) {
     e.preventDefault();
+    showPatience('cr');
     let ok = true;
     if (!validateSel('cr-company',     'crgrp-company'))     ok = false;
     if (!validateSel('cr-rep',         'crgrp-rep'))         ok = false;
@@ -2919,6 +2953,7 @@ function buildOpticommDropdown(sel, selectedState) {
         sendWSRBatchToPA(whLocRecId, locationName, crState);
       }, 8000);
 
+      hidePatience('cr');
       showSuccess('cr-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned. Returning to home screen…`);
       this.reset();
       document.getElementById('cr-date').value = todayStr();
@@ -3088,6 +3123,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
 
   document.getElementById('formOpticommReturn').addEventListener('submit', async function(e) {
     e.preventDefault();
+    showPatience('or');
     let ok = true;
     if (!validateSel('or-wh-state',    'orgrp-wh-state'))    ok = false;
     if (!validateSel('or-wh-location', 'orgrp-wh-location')) ok = false;
@@ -3144,6 +3180,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
         sendWSRBatchToPA(whLocRecId, orLocName, orState);
       }, 8000);
 
+      hidePatience('or');
       showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to OptiComm. Returning to home screen…`);
       this.reset();
       document.getElementById('or-date').value = todayStr();
