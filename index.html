@@ -1598,7 +1598,6 @@ function goBack() {
 
   document.getElementById('formInventory').addEventListener('submit', async function(e) {
     e.preventDefault();
-    showPatience('inv');
     let ok = true;
     if (!validateSel('inv-state',   'invgrp-state'))    ok = false;
     if (!validateSel('inv-location','invgrp-location'))  ok = false;
@@ -1606,6 +1605,7 @@ function goBack() {
     if (!validateTxt('inv-date',    'invgrp-date'))      ok = false;
     if (!ok) { alert('Please complete all required fields.'); return; }
     if (document.querySelectorAll('.inv-qty.qty-over').length > 0) { alert('Please correct invalid quantities.'); return; }
+    showPatience('inv');
 
     const btn = document.getElementById('inv-submitBtn');
     btnLoading(btn);
@@ -1701,8 +1701,7 @@ function goBack() {
       const stateVal = stateEl.value;
       setTimeout(() => sendWSRBatchToPA(locRecId, locationName, stateVal), 15000);
 
-            hidePatience('inv');
-      showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
+                  showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
       this.reset();
       document.getElementById('inv-date').value = todayStr();
       buildStateDropdown(stateEl);
@@ -1711,8 +1710,7 @@ function goBack() {
       document.getElementById('inv-subsections').innerHTML = '';
       notice.style.display = 'block';
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
-    finally { btnReset(btn, 'Submit'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit'); }
   });
 })();
 
@@ -1935,7 +1933,6 @@ let wfFoundRecId = null;
           sendWSRBatchToPA(locRecId, locName, stateName);
         }, 8000);
 
-        hidePatience('wf');
       showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
       } else {
         // === NEW MATERIALS REQUEST ===
@@ -2135,8 +2132,7 @@ let wfFoundRecId = null;
       btn.textContent = 'Submit Request';
       wfUnlockFields();
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
-    finally { btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); }
   });
 })();
 
@@ -2391,7 +2387,6 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
 
 document.getElementById('formDaily').addEventListener('submit', async function(e) {
     e.preventDefault();
-    showPatience('dm');
     let ok = true;
     if (!validateSel('dm-company', 'dmgrp-company')) ok = false;
     if (!validateSel('dm-rep',     'dmgrp-rep'))     ok = false;
@@ -2401,6 +2396,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
     if (document.querySelectorAll('.dm-used.qty-over').length > 0) {
       alert('One or more quantities exceed on-hand stock.'); return;
     }
+    showPatience('dm');
 
     const btn = document.getElementById('dm-submitBtn');
     btnLoading(btn);
@@ -2529,8 +2525,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         sendSJRBatchToPA(repRecId, createdSjrMulIds);
       }, 20000);
 
-      hidePatience('dm');
-      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
+            showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
       
       // Reset form
       this.reset();
@@ -2546,10 +2541,8 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
 
     } catch(err) { 
       alert('Submission failed: ' + err.message); 
-      console.error(err); 
-    }
-    finally { 
-      btnReset(btn, 'Submit Daily Record'); 
+      console.error(err);
+      btnReset(btn, 'Submit Daily Record');
     }
 });
 })();
@@ -2739,7 +2732,6 @@ document.getElementById('bog-demob').addEventListener('change', function() { if(
 
 document.getElementById('formBog').addEventListener('submit', async function(e) {
   e.preventDefault();
-  showPatience('bog');
   const isMob = document.getElementById('bog-mob').checked;
   if (!isMob) {
     const checked = document.querySelectorAll('input[name="bog-swms"]:checked');
@@ -2748,6 +2740,7 @@ document.getElementById('formBog').addEventListener('submit', async function(e) 
   }
   const mobile = document.getElementById('bog-crewmobile').value.trim();
   if (!isMob && mobile && !/^04\d{8}$/.test(mobile)) { alert('Mobile must be in format 04xxxxxxxx.'); return; }
+  showPatience('bog');
 
   const btn = document.getElementById('bog-submitBtn');
   btnLoading(btn);
@@ -2785,13 +2778,11 @@ document.getElementById('formBog').addEventListener('submit', async function(e) 
     }
 
     await atCreate(TBL.bog, fields);
-    hidePatience('bog');
-    alert(`✔ BOG submitted successfully!\n\nCompany: ${fields['Your Company Name']}\nDate: ${fields['Date On-Site']}\nStart: ${hour}:${mins} ${ampm}`);
+        alert(`✔ BOG submitted successfully!\n\nCompany: ${fields['Your Company Name']}\nDate: ${fields['Date On-Site']}\nStart: ${hour}:${mins} ${ampm}`);
     this.reset();
     document.getElementById('bog-date').value = todayStr();
     bogUpdateMobDemob();
-  } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
-  finally { btnReset(btn, 'Submit BOG'); }
+  } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit BOG'); }
 });
 
 bogUpdateMobDemob();
@@ -2855,7 +2846,6 @@ function buildOpticommDropdown(sel, selectedState) {
 
   document.getElementById('formContractorReturn').addEventListener('submit', async function(e) {
     e.preventDefault();
-    showPatience('cr');
     let ok = true;
     if (!validateSel('cr-company',     'crgrp-company'))     ok = false;
     if (!validateSel('cr-rep',         'crgrp-rep'))         ok = false;
@@ -2879,6 +2869,7 @@ function buildOpticommDropdown(sel, selectedState) {
 
     const overQty = returnItems.some(i => i.qty > i.onhand);
     if (overQty) { alert('One or more return quantities exceed on-hand stock.'); return; }
+    showPatience('cr');
 
     const btn = document.getElementById('cr-submitBtn');
     btnLoading(btn);
@@ -2953,8 +2944,7 @@ function buildOpticommDropdown(sel, selectedState) {
         sendWSRBatchToPA(whLocRecId, locationName, crState);
       }, 8000);
 
-      hidePatience('cr');
-      showSuccess('cr-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned. Returning to home screen…`);
+            showSuccess('cr-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned. Returning to home screen…`);
       this.reset();
       document.getElementById('cr-date').value = todayStr();
       buildCompanyDropdown(crCompEl);
@@ -2964,8 +2954,7 @@ function buildOpticommDropdown(sel, selectedState) {
       document.getElementById('cr-subsections').innerHTML = '';
       crNotice.style.display = 'block';
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
-    finally { btnReset(btn, 'Submit Return'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); }
   });
 })();
 
@@ -3123,7 +3112,6 @@ async function loadRepInventoryForReturn(repRecId, repName) {
 
   document.getElementById('formOpticommReturn').addEventListener('submit', async function(e) {
     e.preventDefault();
-    showPatience('or');
     let ok = true;
     if (!validateSel('or-wh-state',    'orgrp-wh-state'))    ok = false;
     if (!validateSel('or-wh-location', 'orgrp-wh-location')) ok = false;
@@ -3144,6 +3132,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
 
     if (returnItems.length === 0) { alert('Please enter a return quantity for at least one item.'); return; }
     if (returnItems.some(i => i.qty > i.onhand)) { alert('One or more quantities exceed stock on hand.'); return; }
+    showPatience('or');
 
     const btn = document.getElementById('or-submitBtn');
     btnLoading(btn);
@@ -3180,8 +3169,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
         sendWSRBatchToPA(whLocRecId, orLocName, orState);
       }, 8000);
 
-      hidePatience('or');
-      showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to OptiComm. Returning to home screen…`);
+            showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to OptiComm. Returning to home screen…`);
       this.reset();
       document.getElementById('or-date').value = todayStr();
       buildStateDropdown(orWhStateEl);
@@ -3190,8 +3178,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
       document.getElementById('or-subsections').innerHTML = '';
       orNotice.style.display = 'block';
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); }
-    finally { btnReset(btn, 'Submit Return'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); }
   });
 })();
 
