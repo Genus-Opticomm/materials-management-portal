@@ -32,8 +32,15 @@
     /* NAV */
     .form-switcher { margin-bottom: 2rem; text-align:center; }
     .form-switcher h2 { font-weight:600; font-size:1.1rem; margin-bottom:.75rem; }
+    .nav-groups { display:flex; flex-wrap:wrap; gap:1.5rem; justify-content:center; max-width:820px; margin:0 auto; }
+    .nav-group { flex:1 1 320px; max-width:380px; background:var(--accent-05); border:1px solid var(--accent-20); border-radius:.75rem; padding:1rem; }
+    .nav-group-label { font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--primary-mid); margin-bottom:.6rem; text-align:left; }
     .nav-buttons { display:flex; flex-wrap:wrap; gap:.5rem; justify-content:center; }
-    .nav-btn { background:var(--accent-60); border:none; color:white; font-family:'Exo',sans-serif; font-weight:600; font-size:.9rem; padding:.75rem 1.5rem; border-radius:.5rem; cursor:pointer; transition:background .3s; }
+    .nav-row-main { margin-bottom:.5rem; }
+    .nav-row-return { border-top:1px dashed var(--accent-20); padding-top:.6rem; }
+    .nav-btn { background:var(--accent-60); border:none; color:white; font-family:'Exo',sans-serif; font-weight:600; font-size:.9rem; padding:.75rem 1.25rem; border-radius:.5rem; cursor:pointer; transition:background .3s; flex:1 1 auto; }
+    .nav-btn-return { background:var(--primary-mid); }
+    .nav-btn-return:hover { background:var(--primary-accent); }
     .nav-btn:hover, .nav-btn.active { background:var(--primary-accent); }
     /* PANELS */
     .form-panel { display:none; }
@@ -141,12 +148,26 @@
   <!-- NAV -->
   <div class="form-switcher">
     <h2>Select Operation</h2>
-    <div class="nav-buttons" id="navButtons">
-      <button class="nav-btn" data-target="panel-inventory">Inventory Received</button>
-      <button class="nav-btn" data-target="panel-opticomm-return">OptiComm Stock Return</button>
-      <button class="nav-btn" data-target="panel-workforce">Field Workforce Materials Request</button>
-      <button class="nav-btn" data-target="panel-daily">Daily Materials Used</button>
-      <button class="nav-btn" data-target="panel-contractor-return">Contractor Stock Return</button>
+    <div class="nav-groups" id="navButtons">
+      <div class="nav-group">
+        <div class="nav-group-label">Warehouse</div>
+        <div class="nav-buttons nav-row-main">
+          <button class="nav-btn" data-target="panel-inventory">Inventory Received</button>
+        </div>
+        <div class="nav-buttons nav-row-return">
+          <button class="nav-btn nav-btn-return" data-target="panel-opticomm-return">OptiComm Stock Return</button>
+        </div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Field</div>
+        <div class="nav-buttons nav-row-main">
+          <button class="nav-btn" data-target="panel-workforce">Field Workforce Materials Request</button>
+          <button class="nav-btn" data-target="panel-daily">Daily Materials Used</button>
+        </div>
+        <div class="nav-buttons nav-row-return">
+          <button class="nav-btn nav-btn-return" data-target="panel-contractor-return">Contractor Stock Return</button>
+        </div>
+      </div>
       <!-- Boots on Ground button hidden until fields confirmed — code preserved below -->
       <!-- <button class="nav-btn" data-target="panel-bog">Boots on Ground</button> -->
     </div>
@@ -1755,7 +1776,6 @@ let wfFoundRecId = null;
 
   document.getElementById('formWorkforce').addEventListener('submit', async function(e) {
     e.preventDefault();
-    showPatience('wf');
     let ok = true;
     if (!validateSel('wf-company',  'wfgrp-company'))  ok = false;
     if (!validateSel('wf-rep',      'wfgrp-rep'))      ok = false;
@@ -1766,6 +1786,7 @@ let wfFoundRecId = null;
     if (document.querySelectorAll('.wf-req.qty-over, .wf-rcv.qty-over').length > 0) {
       alert('One or more quantities exceed available stock. Please correct before submitting.'); return;
     }
+    showPatience('wf');
 
     const btn = document.getElementById('wf-submitBtn');
     btnLoading(btn);
