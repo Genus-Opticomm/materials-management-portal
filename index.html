@@ -3483,7 +3483,7 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
 }
 
 
-// ── Cancel Pick-Up (global scope — called from inline onclick) ───────────
+// ── Cancel Pick-Up (global scope) ────────────────────────────────────────
 async function wfCancelPickup() {
   const reqIdEl  = document.getElementById('wf-reqId') || document.getElementById('wf-requestId');
   const reqIdVal = reqIdEl ? reqIdEl.value.trim().toUpperCase() : '';
@@ -3497,7 +3497,6 @@ async function wfCancelPickup() {
   const cancelBtn = document.getElementById('wf-cancelPickupBtn');
   const submitBtn = document.getElementById('wf-submitBtn');
   const backBtns  = document.querySelectorAll('.form-panel.active .btn-back');
-
   if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.style.opacity = '0.5'; }
   if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '0.5'; }
   backBtns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
@@ -3506,19 +3505,29 @@ async function wfCancelPickup() {
   try {
     if (!wfFoundRecId) throw new Error('No active Request ID found. Please search again.');
 
-    const lineRecs = await atFetchAll(TBL.materialsRequestLines, {
-      filterByFormula: 'FIND("' + wfFoundRecId + '", ARRAYJOIN({Request}))',
-      fields: ['Qty Requested', 'Qty Received', 'Material'],
-    });
-    if (!lineRecs.length) throw new Error('No line items found for this request.');
+    // Step 1: Get the Request ID string (same approach as loadRequestLineItems)
+    const mainRecs = await atSearchByFormula(TBL.materialsRequest, 'RECORD_ID()="' + wfFoundRecId + '"');
+    const reqIDStr = mainRecs[0]?.fields['Request ID'] || '';
+    if (!reqIDStr) throw new Error('Could not retrieve Request ID string from Airtable.');
 
+    // Step 2: Fetch line items using the lookup text field (confirmed working)
+    const lineRecs = await atSearchByFormula(
+      TBL.materialsRequestLines,
+      '{Request ID (from Request)}="' + reqIDStr + '"'
+    );
+    console.log('Cancel pick-up: found ' + lineRecs.length + ' line(s) for ' + reqIDStr);
+    if (!lineRecs.length) throw new Error('No line items found for ' + reqIDStr + '. Please check Airtable.');
+
+    // Step 3: Set Qty Received = 0 on every line
     for (const line of lineRecs) {
       await atUpdate(TBL.materialsRequestLines, line.id, { 'fld8EiZWlMwlVNPPd': 0 });
     }
+
+    // Step 4: Write today as Date Collected to close the request
     await atUpdate(TBL.materialsRequest, wfFoundRecId, { [FLD.mr_dateColl]: todayStr() });
 
-    console.log('✅ Pick-up cancelled for ' + reqIdVal);
-    showSuccess('wf-success', '✔ Pick-up cancelled for ' + reqIdVal + '. All quantities set to 0. Returning to home screen…');
+    console.log('✅ Pick-up cancelled for ' + reqIDStr);
+    showSuccess('wf-success', '✔ Pick-up cancelled for ' + reqIDStr + '. All quantities set to 0. Returning to home screen…');
 
     setTimeout(() => {
       document.getElementById('formWorkforce').reset();
