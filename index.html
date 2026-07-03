@@ -3482,6 +3482,70 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
   }
 }
 
+
+// ── Cancel Pick-Up (global scope — called from inline onclick) ───────────
+async function wfCancelPickup() {
+  const reqIdEl  = document.getElementById('wf-reqId') || document.getElementById('wf-requestId');
+  const reqIdVal = reqIdEl ? reqIdEl.value.trim().toUpperCase() : '';
+
+  if (!confirm(
+    'Are you sure you want to cancel pick-up for ' + reqIdVal + '?\n\n' +
+    'This will set all Qty Received to 0 and mark the request as processed.\n\n' +
+    'This action cannot be undone.'
+  )) return;
+
+  const cancelBtn = document.getElementById('wf-cancelPickupBtn');
+  const submitBtn = document.getElementById('wf-submitBtn');
+  const backBtns  = document.querySelectorAll('.form-panel.active .btn-back');
+
+  if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.style.opacity = '0.5'; }
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '0.5'; }
+  backBtns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+  showPatience('wf');
+
+  try {
+    if (!wfFoundRecId) throw new Error('No active Request ID found. Please search again.');
+
+    const lineRecs = await atFetchAll(TBL.materialsRequestLines, {
+      filterByFormula: 'FIND("' + wfFoundRecId + '", ARRAYJOIN({Request}))',
+      fields: ['Qty Requested', 'Qty Received', 'Material'],
+    });
+    if (!lineRecs.length) throw new Error('No line items found for this request.');
+
+    for (const line of lineRecs) {
+      await atUpdate(TBL.materialsRequestLines, line.id, { 'fld8EiZWlMwlVNPPd': 0 });
+    }
+    await atUpdate(TBL.materialsRequest, wfFoundRecId, { [FLD.mr_dateColl]: todayStr() });
+
+    console.log('✅ Pick-up cancelled for ' + reqIdVal);
+    showSuccess('wf-success', '✔ Pick-up cancelled for ' + reqIdVal + '. All quantities set to 0. Returning to home screen…');
+
+    setTimeout(() => {
+      document.getElementById('formWorkforce').reset();
+      wfMode = 'new'; wfFoundRecId = null;
+      buildStateDropdown(document.getElementById('wf-state'));
+      buildCompanyDropdown(document.getElementById('wf-company'));
+      buildRepDropdown(document.getElementById('wf-rep'), '', document.getElementById('wf-email'), document.getElementById('wf-mobile'));
+      buildLocationDropdown(document.getElementById('wf-location'), '');
+      document.getElementById('wf-subsections').innerHTML = '';
+      document.getElementById('wf-searchStatus').style.display = 'none';
+      document.getElementById('wfgrp-dateColl').style.display = 'none';
+      document.getElementById('wf-notice').style.display = 'block';
+      document.getElementById('wf-submitBtn').textContent = 'Submit Request';
+      wfUnlockFields();
+      hidePatience('wf');
+      goBack();
+    }, 3000);
+
+  } catch(err) {
+    alert('Cancellation failed: ' + err.message);
+    console.error(err);
+    if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.style.opacity = ''; }
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = ''; }
+    backBtns.forEach(b => { b.disabled = false; b.style.opacity = ''; b.style.pointerEvents = ''; });
+    hidePatience('wf');
+  }
+}
 </script>
 </body>
 </html>
