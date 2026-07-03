@@ -132,8 +132,9 @@
     @media(max-width:600px){ .container{margin:-30px 1rem 40px;padding:1.25rem} .field-grid{grid-template-columns:1fr} .form-footer{flex-direction:column} .btn{width:100%;text-align:center} }
   
   /* Patience notice shown during form submission */
-  .patience-notice { display:none; padding:.75rem 1rem; background:var(--accent-05); border:1px solid var(--accent-20); border-radius:.5rem; margin-bottom:1rem; font-size:.88rem; color:var(--primary-mid); }
-  .patience-notice.visible { display: block; }
+  .patience-notice { display:none; padding:1rem 1.25rem; background:#fff3cd; border:2px solid #f0a500; border-radius:.5rem; margin-bottom:1rem; font-size:.92rem; color:#7a4f00; font-weight:600; box-shadow: 0 2px 8px rgba(240,165,0,0.2); }
+  .patience-notice.visible { display: flex; align-items: flex-start; gap:.75rem; }
+  .patience-notice::before { content:"⚠️"; font-size:1.2rem; flex-shrink:0; margin-top:.05rem; }
 
 </style>
   <link rel="icon" href="favicon.png" type="image/png">
@@ -155,7 +156,7 @@
           <button class="nav-btn" data-target="panel-inventory">Inventory Received</button>
         </div>
         <div class="nav-buttons nav-row-return">
-          <button class="nav-btn nav-btn-return" data-target="panel-opticomm-return">OptiComm Stock Return</button>
+          <button class="nav-btn nav-btn-return" data-target="panel-opticomm-return">Opticomm Stock Return</button>
         </div>
       </div>
       <div class="nav-group">
@@ -273,7 +274,10 @@
           </div>
           <div class="field-group" id="wfgrp-dateColl" style="display:none;">
             <label for="wf-dateColl">Date Materials Collected</label>
-            <input type="date" id="wf-dateColl" />
+            <div style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
+              <input type="date" id="wf-dateColl" style="flex:1; min-width:160px;" />
+              <button type="button" class="btn btn-cancel-pickup" id="wf-cancelPickupBtn" onclick="wfCancelPickup()" style="background:#dc3545; color:white; white-space:nowrap;">✕ Cancel Pick-Up</button>
+            </div>
           </div>
         </div>
 
@@ -521,8 +525,8 @@
 
   <!-- ══ OPTICOMM STOCK RETURN ══ -->
   <div class="form-panel" id="panel-opticomm-return">
-    <div class="panel-title">OptiComm Stock Return</div>
-    <div class="panel-subtitle">Record stock being returned from an internal warehouse back to OptiComm.</div>
+    <div class="panel-title">Opticomm Stock Return</div>
+    <div class="panel-subtitle">Record stock being returned from an internal warehouse back to Opticomm.</div>
     <div class="form-wrapper">
       <div class="success-banner" id="or-success"></div>
       <form id="formOpticommReturn" novalidate>
@@ -536,8 +540,8 @@
             <select id="or-wh-location" required disabled><option value="">— Select State First —</option></select>
           </div>
           <div class="field-group" id="orgrp-opticomm-wh">
-            <label for="or-opticomm-wh">OptiComm Return Warehouse <span class="req">*</span></label>
-            <select id="or-opticomm-wh" required><option value="">— Select OptiComm Warehouse —</option></select>
+            <label for="or-opticomm-wh">Opticomm Return Warehouse <span class="req">*</span></label>
+            <select id="or-opticomm-wh" required><option value="">— Select Opticomm Warehouse —</option></select>
           </div>
           <div class="field-group" id="orgrp-date">
             <label for="or-date">Date of Return <span class="req">*</span></label>
@@ -673,7 +677,7 @@ const FLD = {
   csr_notes:          'fldiQGRJSEQdJ0QLI',
   csr_wsr:            'fldVHmBIRSChvkNnU',
   csr_ssr:            'fldtVWXGd4NLTm33n',
-  // OptiComm Stock Returns
+  // Opticomm Stock Returns
   osr_warehouse:      'fldqyjauWZDlFe6sM',
   osr_opticommWh:     'fld8rU1roxHQVZPv9',
   osr_material:       'fldMsk6WTgTJ1AmwZ',
@@ -781,7 +785,7 @@ async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
             'fldQmxxDbNVwrEP4I', // Total Stock Collected
             'fldbEqmnOlnfo6zcz', // Current Stock Requested
             'fldsvoANNKSpTIyXx', // Total Returned from Contractors
-            'fld28aPzjD3XGbsX3', // Total Returned to OptiComm
+            'fld28aPzjD3XGbsX3', // Total Returned to Opticomm
             'fld2Ticr06WS5xSXS', // Current Stock On-Hand
             'fldjjt4inQZLmGAz7', // Current Stock Available
           ],
@@ -811,7 +815,7 @@ async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
         totalStockCollected:          Number(f['fldQmxxDbNVwrEP4I']) || 0,
         currentStockRequested:        Number(f['fldbEqmnOlnfo6zcz']) || 0,
         totalReturnedFromContractors: Number(f['fldsvoANNKSpTIyXx']) || 0,
-        totalReturnedToOptiComm:      Number(f['fld28aPzjD3XGbsX3']) || 0,
+        totalReturnedToOpticomm:      Number(f['fld28aPzjD3XGbsX3']) || 0,
         currentStockOnHand:           Number(f['fld2Ticr06WS5xSXS']) || 0,
         currentStockAvailable:        Number(f['fldjjt4inQZLmGAz7']) || 0,
       };
@@ -1057,7 +1061,7 @@ async function sendOSRBatchToPA(whLocRecId) {
           'flddeVm1RTm3W5A6v', // Return Key
           'fldkjvu5Q0sEXrUWk', // State (from Warehouse)
           'fldYQ6cd15ZYrXFBf', // Location (from Warehouse)
-          'fldM6HxsQxete5toC', // Location (from OptiComm Warehouse)
+          'fldM6HxsQxete5toC', // Location (from Opticomm Warehouse)
           'fldQvBHJpV0DwI7HD', // OP Code (from Material)
           'fldZFAs1x0R8IHTAe', // IT Code (from Material)
           'fldy9qIs4jM0XWWgX', // Description (from Material)
@@ -1236,7 +1240,7 @@ function populateAllDropdowns() {
   // Contractor Return dropdowns
   buildCompanyDropdown(document.getElementById('cr-company'));
   buildStateDropdown(document.getElementById('cr-wh-state'));
-  // OptiComm Return dropdowns
+  // Opticomm Return dropdowns
   buildStateDropdown(document.getElementById('or-wh-state'));
   buildOpticommDropdown(document.getElementById('or-opticomm-wh'), '');
 
@@ -1485,12 +1489,20 @@ function showPatience(formId) {
   // Disable submit button
   const btn = document.getElementById(formId + '-submitBtn');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+  // Disable all Back buttons in the active panel
+  document.querySelectorAll('.form-panel.active .btn-back').forEach(b => {
+    b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none';
+  });
 }
 function hidePatience(formId) {
   const el = document.getElementById(formId + '-patience');
   if (el) el.classList.remove('visible');
   const btn = document.getElementById(formId + '-submitBtn');
   if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  // Re-enable all Back buttons
+  document.querySelectorAll('.form-panel.active .btn-back').forEach(b => {
+    b.disabled = false; b.style.opacity = ''; b.style.pointerEvents = '';
+  });
 }
 
 function showSuccess(bannerId, msg) {
@@ -1570,7 +1582,7 @@ function goBack() {
     buildLocationDropdown(document.getElementById('cr-wh-location'), '');
   } catch(e) {}
 
-  // Reset OptiComm Stock Return
+  // Reset Opticomm Stock Return
   try {
     document.getElementById('formOpticommReturn').reset();
     document.getElementById('or-date').value = todayStr();
@@ -2156,6 +2168,86 @@ let wfFoundRecId = null;
     } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); }
   });
 })();
+
+
+// ════════════════════════════════════════════════════════════════
+//  Cancel Pick-Up — zero out all Qty Received and confirm cancel
+// ════════════════════════════════════════════════════════════════
+async function wfCancelPickup() {
+  // Find the Request ID for the current found record
+  const reqIdEl = document.getElementById('wf-requestId') || document.getElementById('wf-reqId');
+  const reqIdVal = reqIdEl ? reqIdEl.value.trim().toUpperCase() : '';
+
+  const confirmed = confirm(
+    `Are you sure you want to cancel pick-up for ${reqIdVal}?\n\n` +
+    `This will set all Qty Received to 0 and mark the request as cancelled.\n\n` +
+    `This action cannot be undone.`
+  );
+  if (!confirmed) return;
+
+  const cancelBtn = document.getElementById('wf-cancelPickupBtn');
+  const submitBtn = document.getElementById('wf-submitBtn');
+  const backBtns  = document.querySelectorAll('.form-panel.active .btn-back');
+
+  // Disable all buttons during cancellation
+  if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.style.opacity = '0.5'; }
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '0.5'; }
+  backBtns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
+  showPatience('wf');
+
+  try {
+    if (!wfFoundRecId) throw new Error('No active Request ID found. Please search again.');
+
+    // Fetch the line items for this request
+    const lineRecs = await atFetchAll(TBL.materialsRequestLines, {
+      filterByFormula: `FIND("${wfFoundRecId}", ARRAYJOIN({Request}))`,
+      fields: ['Qty Requested', 'Qty Received', 'Material'],
+    });
+
+    if (!lineRecs.length) throw new Error('No line items found for this request.');
+
+    // Update each line item — set Qty Received to 0
+    for (const line of lineRecs) {
+      await atUpdate(TBL.materialsRequestLines, line.id, {
+        'fld8EiZWlMwlVNPPd': 0,   // Qty Received = 0
+      });
+    }
+
+    // Write Date Collected as today (marks it as processed)
+    await atUpdate(TBL.materialsRequest, wfFoundRecId, {
+      [FLD.mr_dateColl]: todayStr(),
+    });
+
+    console.log(`✅ Pick-up cancelled for ${reqIdVal} — ${lineRecs.length} line(s) zeroed.`);
+    showSuccess('wf-success', `✔ Pick-up cancelled for ${reqIdVal}. All quantities set to 0. Returning to home screen…`);
+
+    // Reset form and return home after 3 seconds
+    setTimeout(() => {
+      document.getElementById('formWorkforce').reset();
+      wfMode = 'new'; wfFoundRecId = null;
+      buildStateDropdown(document.getElementById('wf-state'));
+      buildCompanyDropdown(document.getElementById('wf-company'));
+      buildRepDropdown(document.getElementById('wf-rep'), '', document.getElementById('wf-email'), document.getElementById('wf-mobile'));
+      buildLocationDropdown(document.getElementById('wf-location'), '');
+      document.getElementById('wf-subsections').innerHTML = '';
+      document.getElementById('wf-searchStatus').style.display = 'none';
+      document.getElementById('wfgrp-dateColl').style.display = 'none';
+      document.getElementById('wf-notice').style.display = 'block';
+      document.getElementById('wf-submitBtn').textContent = 'Submit Request';
+      wfUnlockFields();
+      goBack();
+    }, 3000);
+
+  } catch(err) {
+    alert('Cancellation failed: ' + err.message);
+    console.error(err);
+    // Re-enable buttons on failure
+    if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.style.opacity = ''; }
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = ''; }
+    backBtns.forEach(b => { b.disabled = false; b.style.opacity = ''; b.style.pointerEvents = ''; });
+    hidePatience('wf');
+  }
+}
 
 async function loadRequestLineItems(requestId, stockFieldName) {
   try {
@@ -2819,7 +2911,7 @@ initData();
 // ═══════════════════════════════════════════════════
 function buildOpticommDropdown(sel, selectedState) {
   if (!sel) return;
-  sel.innerHTML = '<option value="">— Select OptiComm Warehouse —</option>';
+  sel.innerHTML = '<option value="">— Select Opticomm Warehouse —</option>';
   const records = selectedState
     ? (CACHE.opticommByState[selectedState] || [])
     : (CACHE.opticommWarehouses || []);
@@ -3179,7 +3271,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
       for (let i = 0; i < osrBatchFields.length; i += 10) {
         await atCreateBatch(TBL.opticommReturns, osrBatchFields.slice(i, i + 10));
       }
-      console.log(`✅ OptiComm return: ${returnItems.length} item(s) submitted`);
+      console.log(`✅ Opticomm return: ${returnItems.length} item(s) submitted`);
 
       // Send OSR + WSR batches to Excel after delay for rollups to settle
       const orWhRec = CACHE.warehouseByRecId[whLocRecId];
@@ -3190,7 +3282,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
         sendWSRBatchToPA(whLocRecId, orLocName, orState);
       }, 8000);
 
-            showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to OptiComm. Returning to home screen…`);
+            showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to Opticomm. Returning to home screen…`);
       this.reset();
       document.getElementById('or-date').value = todayStr();
       buildStateDropdown(orWhStateEl);
@@ -3325,7 +3417,7 @@ async function buildInvMaterialsTableFromWSR(containerId, whLocRecId, stateVal, 
   }
 }
 
-// Build WSR table for OptiComm return — reads Current Stock On-Hand from WSR (Option A)
+// Build WSR table for Opticomm return — reads Current Stock On-Hand from WSR (Option A)
 async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal, sfName) {
   const container = document.getElementById(containerId);
   container.innerHTML = '<div class="table-loading">⏳ Loading warehouse stock on hand...</div>';
