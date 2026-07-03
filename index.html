@@ -132,9 +132,11 @@
     @media(max-width:600px){ .container{margin:-30px 1rem 40px;padding:1.25rem} .field-grid{grid-template-columns:1fr} .form-footer{flex-direction:column} .btn{width:100%;text-align:center} }
   
   /* Patience notice shown during form submission */
-  .patience-notice { display:none; padding:1rem 1.25rem; background:#fff3cd; border:2px solid #f0a500; border-radius:.5rem; margin-bottom:1rem; font-size:.92rem; color:#7a4f00; font-weight:600; box-shadow: 0 2px 8px rgba(240,165,0,0.2); }
-  .patience-notice.visible { display: flex; align-items: flex-start; gap:.75rem; }
-  .patience-notice::before { content:"⚠️"; font-size:1.2rem; flex-shrink:0; margin-top:.05rem; }
+  .patience-notice { display:none; padding:1rem 1.25rem; background:#fff3cd; border:2px solid #f0a500; border-radius:.5rem; margin-bottom:1rem; font-size:.92rem; color:#7a4f00; font-weight:600; box-shadow:0 2px 8px rgba(240,165,0,0.2); }
+  .patience-notice.visible { display:flex; align-items:flex-start; gap:.75rem; }
+  .patience-notice .pn-icon { font-size:1.2rem; flex-shrink:0; margin-top:.05rem; }
+  .patience-notice .pn-text { display:flex; flex-direction:column; gap:.2rem; text-align:left; }
+  .patience-notice .pn-text span { font-weight:400; font-size:.88rem; }
 
 </style>
   <link rel="icon" href="favicon.png" type="image/png">
@@ -216,7 +218,7 @@
         <div class="subsections" id="inv-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="inv-patience" class="patience-notice">⏳ <strong>Submitting your data...</strong><br>Please keep this page open and do not refresh, close, or <br>navigate away until you see the confirmation message.</div>
+          <div id="inv-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="inv-submitBtn">Submit</button>
         </div>
       </form>
@@ -274,10 +276,10 @@
           </div>
           <div class="field-group" id="wfgrp-dateColl" style="display:none;">
             <label for="wf-dateColl">Date Materials Collected</label>
-            <div style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
-              <input type="date" id="wf-dateColl" style="flex:1; min-width:160px;" />
-              <button type="button" class="btn btn-cancel-pickup" id="wf-cancelPickupBtn" onclick="wfCancelPickup()" style="background:#dc3545; color:white; white-space:nowrap;">✕ Cancel Pick-Up</button>
-            </div>
+            <input type="date" id="wf-dateColl" />
+          </div>
+          <div class="field-group" id="wfgrp-cancelPickup" style="display:none; justify-content:flex-end; align-self:flex-end;">
+            <button type="button" class="btn" id="wf-cancelPickupBtn" onclick="wfCancelPickup()" style="background:#dc3545; color:white; white-space:nowrap; width:100%;">✕ Cancel Pick-Up</button>
           </div>
         </div>
 
@@ -286,7 +288,7 @@
         <div class="subsections" id="wf-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="wf-patience" class="patience-notice">⏳ <strong>Submitting your data...</strong><br>Please keep this page open and do not refresh, close, or <br>navigate away until you see the confirmation message.</div>
+          <div id="wf-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="wf-submitBtn">Submit Request</button>
         </div>
       </form>
@@ -336,7 +338,7 @@
         <div class="subsections" id="dm-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="dm-patience" class="patience-notice">⏳ <strong>Submitting your data...</strong><br>Please keep this page open and do not refresh, close, or <br>navigate away until you see the confirmation message.</div>
+          <div id="dm-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="dm-submitBtn">Submit Daily Record</button>
         </div>
       </form>
@@ -470,7 +472,7 @@
         </div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="bog-patience" class="patience-notice">⏳ <strong>Submitting your data...</strong><br>Please keep this page open and do not refresh, close, or <br>navigate away until you see the confirmation message.</div>
+          <div id="bog-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="bog-submitBtn">Submit BOG</button>
         </div>
       </form>
@@ -516,7 +518,7 @@
         <div class="subsections" id="cr-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="cr-patience" class="patience-notice">⏳ <strong>Submitting your data...</strong><br>Please keep this page open and do not refresh, close, or <br>navigate away until you see the confirmation message.</div>
+          <div id="cr-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="cr-submitBtn">Submit Return</button>
         </div>
       </form>
@@ -557,7 +559,7 @@
         <div class="subsections" id="or-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="or-patience" class="patience-notice">⏳ <strong>Submitting your data...</strong><br>Please keep this page open and do not refresh, close, or <br>navigate away until you see the confirmation message.</div>
+          <div id="or-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="or-submitBtn">Submit Return</button>
         </div>
       </form>
@@ -1486,10 +1488,8 @@ function todayStr() {
 function showPatience(formId) {
   const el = document.getElementById(formId + '-patience');
   if (el) el.classList.add('visible');
-  // Disable submit button
   const btn = document.getElementById(formId + '-submitBtn');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
-  // Disable all Back buttons in the active panel
   document.querySelectorAll('.form-panel.active .btn-back').forEach(b => {
     b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none';
   });
@@ -1499,7 +1499,6 @@ function hidePatience(formId) {
   if (el) el.classList.remove('visible');
   const btn = document.getElementById(formId + '-submitBtn');
   if (btn) { btn.disabled = false; btn.style.opacity = ''; }
-  // Re-enable all Back buttons
   document.querySelectorAll('.form-panel.active .btn-back').forEach(b => {
     b.disabled = false; b.style.opacity = ''; b.style.pointerEvents = '';
   });
@@ -1552,6 +1551,7 @@ function goBack() {
     document.getElementById('wf-subsections').innerHTML = '';
     document.getElementById('wf-notice').style.display = 'block';
     document.getElementById('wfgrp-dateColl').style.display = 'none';
+    document.getElementById('wfgrp-cancelPickup').style.display = 'none';
     document.getElementById('wf-submitBtn').textContent = 'Submit Request';
     wfMode = 'new'; wfFoundRecId = null;
     wfUnlockFields();
@@ -2161,6 +2161,8 @@ let wfFoundRecId = null;
       document.getElementById('wf-subsections').innerHTML = '';
       document.getElementById('wf-searchStatus').style.display = 'none';
       document.getElementById('wfgrp-dateColl').style.display = 'none';
+      document.getElementById('wfgrp-cancelPickup').style.display = 'none';
+      hidePatience('wf');
       notice.style.display = 'block';
       btn.textContent = 'Submit Request';
       wfUnlockFields();
@@ -2168,86 +2170,6 @@ let wfFoundRecId = null;
     } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); }
   });
 })();
-
-
-// ════════════════════════════════════════════════════════════════
-//  Cancel Pick-Up — zero out all Qty Received and confirm cancel
-// ════════════════════════════════════════════════════════════════
-async function wfCancelPickup() {
-  // Find the Request ID for the current found record
-  const reqIdEl = document.getElementById('wf-requestId') || document.getElementById('wf-reqId');
-  const reqIdVal = reqIdEl ? reqIdEl.value.trim().toUpperCase() : '';
-
-  const confirmed = confirm(
-    `Are you sure you want to cancel pick-up for ${reqIdVal}?\n\n` +
-    `This will set all Qty Received to 0 and mark the request as cancelled.\n\n` +
-    `This action cannot be undone.`
-  );
-  if (!confirmed) return;
-
-  const cancelBtn = document.getElementById('wf-cancelPickupBtn');
-  const submitBtn = document.getElementById('wf-submitBtn');
-  const backBtns  = document.querySelectorAll('.form-panel.active .btn-back');
-
-  // Disable all buttons during cancellation
-  if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.style.opacity = '0.5'; }
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '0.5'; }
-  backBtns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
-  showPatience('wf');
-
-  try {
-    if (!wfFoundRecId) throw new Error('No active Request ID found. Please search again.');
-
-    // Fetch the line items for this request
-    const lineRecs = await atFetchAll(TBL.materialsRequestLines, {
-      filterByFormula: `FIND("${wfFoundRecId}", ARRAYJOIN({Request}))`,
-      fields: ['Qty Requested', 'Qty Received', 'Material'],
-    });
-
-    if (!lineRecs.length) throw new Error('No line items found for this request.');
-
-    // Update each line item — set Qty Received to 0
-    for (const line of lineRecs) {
-      await atUpdate(TBL.materialsRequestLines, line.id, {
-        'fld8EiZWlMwlVNPPd': 0,   // Qty Received = 0
-      });
-    }
-
-    // Write Date Collected as today (marks it as processed)
-    await atUpdate(TBL.materialsRequest, wfFoundRecId, {
-      [FLD.mr_dateColl]: todayStr(),
-    });
-
-    console.log(`✅ Pick-up cancelled for ${reqIdVal} — ${lineRecs.length} line(s) zeroed.`);
-    showSuccess('wf-success', `✔ Pick-up cancelled for ${reqIdVal}. All quantities set to 0. Returning to home screen…`);
-
-    // Reset form and return home after 3 seconds
-    setTimeout(() => {
-      document.getElementById('formWorkforce').reset();
-      wfMode = 'new'; wfFoundRecId = null;
-      buildStateDropdown(document.getElementById('wf-state'));
-      buildCompanyDropdown(document.getElementById('wf-company'));
-      buildRepDropdown(document.getElementById('wf-rep'), '', document.getElementById('wf-email'), document.getElementById('wf-mobile'));
-      buildLocationDropdown(document.getElementById('wf-location'), '');
-      document.getElementById('wf-subsections').innerHTML = '';
-      document.getElementById('wf-searchStatus').style.display = 'none';
-      document.getElementById('wfgrp-dateColl').style.display = 'none';
-      document.getElementById('wf-notice').style.display = 'block';
-      document.getElementById('wf-submitBtn').textContent = 'Submit Request';
-      wfUnlockFields();
-      goBack();
-    }, 3000);
-
-  } catch(err) {
-    alert('Cancellation failed: ' + err.message);
-    console.error(err);
-    // Re-enable buttons on failure
-    if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.style.opacity = ''; }
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = ''; }
-    backBtns.forEach(b => { b.disabled = false; b.style.opacity = ''; b.style.pointerEvents = ''; });
-    hidePatience('wf');
-  }
-}
 
 async function loadRequestLineItems(requestId, stockFieldName) {
   try {
@@ -2429,7 +2351,9 @@ async function wfSearch() {
     wfLockFields();
     setQtyMode('receive');
     document.getElementById('wfgrp-dateColl').style.display = '';
+    document.getElementById('wfgrp-cancelPickup').style.display = '';
     document.getElementById('wf-submitBtn').textContent = 'Submit Receipt Confirmation';
+    hidePatience('wf');
     showBanner(banner, 'found', `✔ ${idVal} found — review requested quantities and enter received amounts.`);
 
   } catch(err) {
