@@ -274,12 +274,12 @@
             <label for="wf-dateReq">Date of Materials Required <span class="req">*</span></label>
             <input type="date" id="wf-dateReq" required />
           </div>
-          <div class="field-group" id="wfgrp-dateColl" style="display:none;">
+          <div class="field-group" id="wfgrp-dateColl" style="display:none; grid-column:span 2;">
             <label for="wf-dateColl">Date Materials Collected</label>
-            <input type="date" id="wf-dateColl" />
-          </div>
-          <div class="field-group" id="wfgrp-cancelPickup" style="display:none; justify-content:flex-end; align-self:flex-end;">
-            <button type="button" class="btn" id="wf-cancelPickupBtn" onclick="wfCancelPickup()" style="background:#dc3545; color:white; white-space:nowrap; width:100%;">✕ Cancel Pick-Up</button>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; align-items:end;">
+              <input type="date" id="wf-dateColl" />
+              <button type="button" class="btn" id="wf-cancelPickupBtn" onclick="wfCancelPickup()" style="background:#dc3545; color:white; white-space:nowrap;">✕ Cancel Pick-Up</button>
+            </div>
           </div>
         </div>
 
@@ -1551,7 +1551,6 @@ function goBack() {
     document.getElementById('wf-subsections').innerHTML = '';
     document.getElementById('wf-notice').style.display = 'block';
     document.getElementById('wfgrp-dateColl').style.display = 'none';
-    document.getElementById('wfgrp-cancelPickup').style.display = 'none';
     document.getElementById('wf-submitBtn').textContent = 'Submit Request';
     wfMode = 'new'; wfFoundRecId = null;
     wfUnlockFields();
@@ -2161,8 +2160,6 @@ let wfFoundRecId = null;
       document.getElementById('wf-subsections').innerHTML = '';
       document.getElementById('wf-searchStatus').style.display = 'none';
       document.getElementById('wfgrp-dateColl').style.display = 'none';
-      document.getElementById('wfgrp-cancelPickup').style.display = 'none';
-      hidePatience('wf');
       notice.style.display = 'block';
       btn.textContent = 'Submit Request';
       wfUnlockFields();
@@ -2351,7 +2348,6 @@ async function wfSearch() {
     wfLockFields();
     setQtyMode('receive');
     document.getElementById('wfgrp-dateColl').style.display = '';
-    document.getElementById('wfgrp-cancelPickup').style.display = '';
     document.getElementById('wf-submitBtn').textContent = 'Submit Receipt Confirmation';
     hidePatience('wf');
     showBanner(banner, 'found', `✔ ${idVal} found — review requested quantities and enter received amounts.`);
