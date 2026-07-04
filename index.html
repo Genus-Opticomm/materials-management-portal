@@ -581,7 +581,8 @@ const PA_WSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environ
 const PA_SSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6c7551321b01416c8d7a0b6127f58fb0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=7ZhHQogCqtp7a6gp-90tXAiP4whoyVyKyZMVLBXYvL4';
 const PA_SJR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/7e65653d80fa42bea5045d2cb94c4080/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=30TUImpQ82nwDumYglJsEOl6Zn3wRlkb3kmYtyxlS4A';
 const PA_CSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/fd8f5f98a93f4db79483a117f7896cb2/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xnIQ-CC19447bRty-0MqYqiIObpSTlTa3RCzubD3rao';
-const PA_OSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b02575e45de346c391b0f2b908b7f8bc/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uC_UfLCVhci3t5hCDU9MEnGxUT0zh3ueYqNaKicRHo8'; // Replace with your WSR webhook URL
+const PA_OSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b02575e45de346c391b0f2b908b7f8bc/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uC_UfLCVhci3t5hCDU9MEnGxUT0zh3ueYqNaKicRHo8';
+const PA_MR_WEBHOOK  = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8ec9209706434bc9a2cdb286b6a827a4/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YIHo9VYF7rmQMPIkjwL17oTuKbPwj6af9o2rBaJjeFE'; // Materials Request → SSReq_Data Excel
 const AT_API   = 'https://api.airtable.com/v0';
 
 const TBL = {
@@ -1051,6 +1052,20 @@ async function sendCSRBatchToPA(repRecId) {
 
 // Fetch OSR rows for a warehouse and send as one batch to Power Automate
 async function sendOSRBatchToPA(whLocRecId) {
+async function triggerMRWebhook(record) {
+  if (!PA_MR_WEBHOOK) { console.warn('PA_MR_WEBHOOK not configured'); return; }
+  try {
+    await fetch(PA_MR_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ record }),
+    });
+    console.log('✅ MR webhook triggered');
+  } catch(err) {
+    console.warn('MR webhook failed:', err.message);
+  }
+}
+
   if (!PA_OSR_WEBHOOK) { console.warn('PA_OSR_WEBHOOK not configured'); return; }
   try {
     // Fetch all OSR rows — linked record FIND unreliable, send full table to PA
@@ -1966,6 +1981,12 @@ let wfFoundRecId = null;
           sendWSRBatchToPA(locRecId, locName, stateName);
         }, 8000);
 
+        // Trigger MR webhook so Date Collected updates in SSReq_Data Excel table
+        try {
+          const updatedMR = await atSearchByFormula(TBL.materialsRequest, `RECORD_ID()="${wfFoundRecId}"`);
+          if (updatedMR[0]) triggerMRWebhook(updatedMR[0]);
+        } catch(e) { console.warn('MR webhook on receipt:', e.message); }
+
       showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
       } else {
         // === NEW MATERIALS REQUEST ===
@@ -2147,6 +2168,12 @@ let wfFoundRecId = null;
           sendSSRBatchToPA(repRecId);
           sendWSRBatchToPA(locRecId, wfLocName, stateName);
         }, 8000);
+
+        // Trigger MR webhook so new row appears in SSReq_Data Excel table
+        try {
+          const mrRecord = await atSearchByFormula(TBL.materialsRequest, `RECORD_ID()="${mainRequestId}"`);
+          if (mrRecord[0]) triggerMRWebhook(mrRecord[0]);
+        } catch(e) { console.warn('MR webhook on new request:', e.message); }
 
         showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items). Returning to home screen…`);
       }
