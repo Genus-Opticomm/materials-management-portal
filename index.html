@@ -135,7 +135,7 @@
   .patience-notice { display:none; padding:1rem 1.25rem; background:#fff3cd; border:2px solid #f0a500; border-radius:.5rem; margin-bottom:1rem; font-size:.92rem; color:#7a4f00; font-weight:600; box-shadow:0 2px 8px rgba(240,165,0,0.2); }
   .patience-notice.visible { display:flex; align-items:flex-start; gap:.75rem; }
   .patience-notice .pn-icon { font-size:1.2rem; flex-shrink:0; margin-top:.05rem; }
-  .patience-notice .pn-text { display:flex; flex-direction:column; gap:.2rem; text-align:left; }
+  .patience-notice .pn-text { display:flex; flex-direction:column; gap:.2rem; text-align:left; max-width:480px; }
   .patience-notice .pn-text span { font-weight:400; font-size:.88rem; }
 
 </style>
@@ -218,7 +218,7 @@
         <div class="subsections" id="inv-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="inv-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text" style="max-width: 480px;"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
+          <div id="inv-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="inv-submitBtn">Submit</button>
         </div>
       </form>
@@ -288,7 +288,7 @@
         <div class="subsections" id="wf-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="wf-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text" style="max-width: 480px;"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
+          <div id="wf-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="wf-submitBtn">Submit Request</button>
         </div>
       </form>
@@ -338,7 +338,7 @@
         <div class="subsections" id="dm-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="dm-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text" style="max-width: 480px;"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
+          <div id="dm-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="dm-submitBtn">Submit Daily Record</button>
         </div>
       </form>
@@ -472,7 +472,7 @@
         </div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="bog-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text" style="max-width: 480px;"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
+          <div id="bog-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="bog-submitBtn">Submit BOG</button>
         </div>
       </form>
@@ -518,7 +518,7 @@
         <div class="subsections" id="cr-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="cr-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text" style="max-width: 480px;"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
+          <div id="cr-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="cr-submitBtn">Submit Return</button>
         </div>
       </form>
@@ -559,7 +559,7 @@
         <div class="subsections" id="or-subsections"></div>
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
-          <div id="or-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text" style="max-width: 480px;"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
+          <div id="or-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="or-submitBtn">Submit Return</button>
         </div>
       </form>
@@ -1551,6 +1551,7 @@ function goBack() {
     document.getElementById('wf-subsections').innerHTML = '';
     document.getElementById('wf-notice').style.display = 'block';
     document.getElementById('wfgrp-dateColl').style.display = 'none';
+    hidePatience('wf');
     document.getElementById('wf-submitBtn').textContent = 'Submit Request';
     wfMode = 'new'; wfFoundRecId = null;
     wfUnlockFields();
@@ -3505,56 +3506,78 @@ async function wfCancelPickup() {
   try {
     if (!wfFoundRecId) throw new Error('No active Request ID found. Please search again.');
 
-    // Step 1: Get the Request ID string and warehouse details
-    const mainRecs  = await atSearchByFormula(TBL.materialsRequest, 'RECORD_ID()="' + wfFoundRecId + '"');
-    const reqRecord = mainRecs[0];
-    const reqIDStr  = reqRecord?.fields['Request ID'] || '';
+    // Step 1: Get Request ID string and warehouse details
+    const mainRecs   = await atSearchByFormula(TBL.materialsRequest, 'RECORD_ID()="' + wfFoundRecId + '"');
+    const reqRecord  = mainRecs[0];
+    const reqIDStr   = reqRecord?.fields['Request ID'] || '';
     if (!reqIDStr) throw new Error('Could not retrieve Request ID string from Airtable.');
 
-    // Step 2: Get warehouse location for stock field name
     const locOpt     = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
     const locName    = locOpt?.dataset?.location || '';
     const stateName  = document.getElementById('wf-state').value;
     const stockField = getStockFieldName(stateName, locName);
 
-    // Step 3: Fetch all line items using lookup text field (confirmed working)
+    // Step 2: Fetch all line items using lookup text field
     const lineRecs = await atSearchByFormula(
       TBL.materialsRequestLines,
       '{Request ID (from Request)}="' + reqIDStr + '"'
     );
-    console.log('Cancel pick-up: found ' + lineRecs.length + ' line(s) for ' + reqIDStr);
+    console.log('Cancel: found ' + lineRecs.length + ' line(s) for ' + reqIDStr);
     if (!lineRecs.length) throw new Error('No line items found for ' + reqIDStr + '.');
 
+    // Step 3: Collect line IDs for SSR unlink
+    const cancelledLineIds = lineRecs.map(l => l.id);
+
     // Step 4: For each line — zero Qty Received, tick Order Cancelled,
-    //         and return Qty Requested back to warehouse stock
+    //         return Qty Requested to warehouse stock
     for (const line of lineRecs) {
       const matId        = (line.fields['Material'] || [])[0];
       const qtyRequested = parseInt(line.fields['Qty Requested']) || 0;
 
-      // Zero Qty Received + tick Order Cancelled on the line item
       await atUpdate(TBL.materialsRequestLines, line.id, {
         'fld8EiZWlMwlVNPPd': 0,      // Qty Received = 0
-        'fldwWddJe1NXJ5bdM': true,   // Order Cancelled = checked
+        'fldwWddJe1NXJ5bdM': true,   // Order Cancelled = checked (Lines)
       });
 
-      // Return the full Qty Requested back to warehouse stock
       if (matId && qtyRequested > 0) {
         const matRec    = CACHE.materials.find(r => r.id === matId);
         const currStock = parseFloat(matRec?.fields?.[stockField] || 0);
         const newStock  = currStock + qtyRequested;
         await atUpdate(TBL.materialsQuantities, matId, { [stockField]: newStock });
         if (matRec) matRec.fields[stockField] = newStock;
-        console.log('Returned ' + qtyRequested + ' of ' + matId + ' to stock → new total: ' + newStock);
+        console.log('Returned ' + qtyRequested + ' of ' + matId + ' → stock now: ' + newStock);
       }
     }
 
-    // Step 5: Write Date Collected + tick Order Cancelled on the header record
+    // Step 5: Tick Order Cancelled + Date Collected on the header record
     await atUpdate(TBL.materialsRequest, wfFoundRecId, {
       [FLD.mr_dateColl]:   todayStr(),
-      'fldNMQL3eS1WAdOMm': true,   // Order Cancelled = checked
+      'fldNMQL3eS1WAdOMm': true,   // Order Cancelled = checked (Header)
     });
 
-    console.log('✅ Pick-up cancelled for ' + reqIDStr + '. Stock restored.');
+    // Step 6: Remove the cancelled line IDs from SSR Materials Request Lines (Requested)
+    // Find all SSR rows that reference any of these line IDs, then remove them
+    try {
+      const allSsrRows = await atFetchAll(TBL.subcontractorStockReport, {
+        fields: ['Materials Request Lines (Requested)'],
+      });
+      const ssrToUpdate = allSsrRows.filter(row => {
+        const existing = row.fields['Materials Request Lines (Requested)'] || [];
+        return existing.some(id => cancelledLineIds.includes(id));
+      });
+      for (const ssrRow of ssrToUpdate) {
+        const existing = ssrRow.fields['Materials Request Lines (Requested)'] || [];
+        const updated  = existing.filter(id => !cancelledLineIds.includes(id));
+        await atUpdate(TBL.subcontractorStockReport, ssrRow.id, {
+          'fldVY5XnJZWIXmnpn': updated,   // Materials Request Lines (Requested)
+        });
+        console.log('SSR: removed ' + (existing.length - updated.length) + ' cancelled line(s) from row ' + ssrRow.id);
+      }
+    } catch(ssrErr) {
+      console.warn('SSR unlink warning:', ssrErr.message);
+    }
+
+    console.log('✅ Pick-up cancelled for ' + reqIDStr);
     showSuccess('wf-success', '✔ Pick-up cancelled for ' + reqIDStr + '. All stock returned to warehouse. Returning to home screen…');
 
     setTimeout(() => {
