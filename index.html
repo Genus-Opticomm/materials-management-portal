@@ -1052,20 +1052,6 @@ async function sendCSRBatchToPA(repRecId) {
 
 // Fetch OSR rows for a warehouse and send as one batch to Power Automate
 async function sendOSRBatchToPA(whLocRecId) {
-async function triggerMRWebhook(record) {
-  if (!PA_MR_WEBHOOK) { console.warn('PA_MR_WEBHOOK not configured'); return; }
-  try {
-    await fetch(PA_MR_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ record }),
-    });
-    console.log('✅ MR webhook triggered');
-  } catch(err) {
-    console.warn('MR webhook failed:', err.message);
-  }
-}
-
   if (!PA_OSR_WEBHOOK) { console.warn('PA_OSR_WEBHOOK not configured'); return; }
   try {
     // Fetch all OSR rows — linked record FIND unreliable, send full table to PA
@@ -1981,7 +1967,7 @@ let wfFoundRecId = null;
           sendWSRBatchToPA(locRecId, locName, stateName);
         }, 8000);
 
-        // Trigger MR webhook so Date Collected updates in SSReq_Data Excel table
+        // Trigger MR webhook so Date Collected updates in SSReq_Data Excel
         try {
           const updatedMR = await atSearchByFormula(TBL.materialsRequest, `RECORD_ID()="${wfFoundRecId}"`);
           if (updatedMR[0]) triggerMRWebhook(updatedMR[0]);
@@ -2169,7 +2155,7 @@ let wfFoundRecId = null;
           sendWSRBatchToPA(locRecId, wfLocName, stateName);
         }, 8000);
 
-        // Trigger MR webhook so new row appears in SSReq_Data Excel table
+        // Trigger MR webhook so new row appears in SSReq_Data Excel
         try {
           const mrRecord = await atSearchByFormula(TBL.materialsRequest, `RECORD_ID()="${mainRequestId}"`);
           if (mrRecord[0]) triggerMRWebhook(mrRecord[0]);
@@ -3605,6 +3591,9 @@ async function wfCancelPickup() {
     }
 
     console.log('✅ Pick-up cancelled for ' + reqIDStr);
+    // Trigger MR webhook so Order Cancelled + Date Collected update in Excel
+    try { if (reqRecord) triggerMRWebhook(reqRecord); } catch(e) { console.warn('MR webhook on cancel:', e.message); }
+
     showSuccess('wf-success', '✔ Pick-up cancelled for ' + reqIDStr + '. All stock returned to warehouse. Returning to home screen…');
 
     setTimeout(() => {
@@ -3631,6 +3620,24 @@ async function wfCancelPickup() {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = ''; }
     backBtns.forEach(b => { b.disabled = false; b.style.opacity = ''; b.style.pointerEvents = ''; });
     hidePatience('wf');
+  }
+}
+
+// ── triggerMRWebhook — global scope so all call sites can reach it ───────
+async function triggerMRWebhook(record) {
+  if (typeof PA_MR_WEBHOOK === 'undefined' || !PA_MR_WEBHOOK) {
+    console.warn('PA_MR_WEBHOOK not configured — skipping MR Excel sync');
+    return;
+  }
+  try {
+    await fetch(PA_MR_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ record }),
+    });
+    console.log('✅ MR webhook triggered for', record?.fields?.['Request ID'] || record?.id);
+  } catch(err) {
+    console.warn('MR webhook failed:', err.message);
   }
 }
 </script>
