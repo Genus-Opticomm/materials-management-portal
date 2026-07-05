@@ -3582,7 +3582,7 @@ async function wfCancelPickup() {
         const existing = ssrRow.fields['Materials Request Lines (Requested)'] || [];
         const updated  = existing.filter(id => !cancelledLineIds.includes(id));
         await atUpdate(TBL.subcontractorStockReport, ssrRow.id, {
-          'fldVY5XnJZWIXmnpn': updated,   // Materials Request Lines (Requested)
+          'fld9sxRu0sjgTIX5y': updated,   // Materials Request Lines (Requested)
         });
         console.log('SSR: removed ' + (existing.length - updated.length) + ' cancelled line(s) from row ' + ssrRow.id);
       }
@@ -3591,7 +3591,6 @@ async function wfCancelPickup() {
     }
 
     console.log('✅ Pick-up cancelled for ' + reqIDStr);
-    // Trigger MR webhook so Order Cancelled + Date Collected update in Excel
     try { if (reqRecord) triggerMRWebhook(reqRecord); } catch(e) { console.warn('MR webhook on cancel:', e.message); }
 
     showSuccess('wf-success', '✔ Pick-up cancelled for ' + reqIDStr + '. All stock returned to warehouse. Returning to home screen…');
@@ -3623,7 +3622,6 @@ async function wfCancelPickup() {
   }
 }
 
-// ── triggerMRWebhook — global scope so all call sites can reach it ───────
 async function triggerMRWebhook(record) {
   if (typeof PA_MR_WEBHOOK === 'undefined' || !PA_MR_WEBHOOK) {
     console.warn('PA_MR_WEBHOOK not configured — skipping MR Excel sync');
