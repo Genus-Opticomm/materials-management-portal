@@ -3591,8 +3591,12 @@ async function wfCancelPickup() {
     }
 
     console.log('✅ Pick-up cancelled for ' + reqIDStr);
-    try { if (reqRecord) triggerMRWebhook(reqRecord); } catch(e) { console.warn('MR webhook on cancel:', e.message); }
-
+    // Re-fetch the record AFTER all updates so Date Collected + Order Cancelled are included
+    try {
+      const freshMR = await atSearchByFormula(TBL.materialsRequest, 'RECORD_ID()="' + wfFoundRecId + '"');
+      if (freshMR[0]) triggerMRWebhook(freshMR[0]);
+    } catch(e) { console.warn('MR webhook on cancel:', e.message); }
+    
     showSuccess('wf-success', '✔ Pick-up cancelled for ' + reqIDStr + '. All stock returned to warehouse. Returning to home screen…');
 
     setTimeout(() => {
