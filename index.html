@@ -1752,6 +1752,7 @@ function goBack() {
 //  FIELD WORKFORCE MATERIALS REQUEST
 // ═══════════════════════════════════════════════════
 let wfMode = 'new'; // 'new' | 'receive'
+let wfCancelMode = false; // true when Cancel Pick-Up triggers submit
 let wfFoundRecId = null;
 
 (function() {
@@ -1817,7 +1818,8 @@ let wfFoundRecId = null;
         const rcvItems = [];
         document.querySelectorAll('.wf-rcv').forEach(inp => {
           const qty = parseInt(inp.value) || 0;
-          if (qty > 0) {
+          // In cancel mode include all items (even 0) so stock can be restored
+          if (qty > 0 || wfCancelMode) {
             rcvItems.push({ 
               recId: inp.dataset.record, 
               qtyReceived: qty 
@@ -1851,10 +1853,10 @@ let wfFoundRecId = null;
           );
 
           if (matchingLine) {
-            await atUpdate(TBL.materialsRequestLines, matchingLine.id, {
-              'Qty Received': item.qtyReceived
-            });
-            console.log(`Updated Qty Received for material ${item.recId}`);
+            const lineFields = { 'Qty Received': item.qtyReceived };
+            if (wfCancelMode) lineFields['fldwWddJe1NXJ5bdM'] = true; // Order Cancelled
+            await atUpdate(TBL.materialsRequestLines, matchingLine.id, lineFields);
+            console.log(`Updated Qty Received for material ${item.recId}${wfCancelMode ? ' (Order Cancelled)' : ''}`);
           }
 
           // Stock adjustment: Return (Requested - Received) back to warehouse
@@ -1874,13 +1876,15 @@ let wfFoundRecId = null;
           matRec.fields[stockField] = newStock;
         }
 
-        // Write Date Collected to the Materials Request header record
+        // Write Date Collected (and Order Cancelled if in cancel mode) to header
         const dateCollected = document.getElementById('wf-dateColl').value;
-        if (dateCollected) {
-          await atUpdate(TBL.materialsRequest, wfFoundRecId, {
-            [FLD.mr_dateColl]: dateCollected,
-          });
-          console.log('✅ Date Collected written:', dateCollected);
+        if (dateCollected || wfCancelMode) {
+          const headerUpdate = { [FLD.mr_dateColl]: dateCollected || todayStr() };
+          if (wfCancelMode) {
+            headerUpdate['fldNMQL3eS1WAdOMm'] = true; // Order Cancelled = checked
+          }
+          await atUpdate(TBL.materialsRequest, wfFoundRecId, headerUpdate);
+          console.log('✅ Header updated:', wfCancelMode ? 'Date Collected + Order Cancelled' : 'Date Collected');
         }
 
         // === POPULATE SSR (Subcontractor Stock Report — Collected) ===
@@ -2166,7 +2170,7 @@ let wfFoundRecId = null;
 
       // Reset
       this.reset();
-      wfMode = 'new'; wfFoundRecId = null;
+      wfMode = 'new'; wfFoundRecId = null; wfCancelMode = false;
       buildStateDropdown(document.getElementById('wf-state'));
       buildCompanyDropdown(compEl);
       buildRepDropdown(repEl, '', emailEl, mobileEl);
@@ -3504,126 +3508,27 @@ async function wfCancelPickup() {
 
   if (!confirm(
     'Are you sure you want to cancel pick-up for ' + reqIdVal + '?\n\n' +
-    'This will return all requested stock back to the warehouse and set Qty Received to 0.\n\n' +
+    'This will set all Qty Received to 0 and return all stock to the warehouse.\n\n' +
     'This action cannot be undone.'
   )) return;
 
-  const cancelBtn = document.getElementById('wf-cancelPickupBtn');
-  const submitBtn = document.getElementById('wf-submitBtn');
-  const backBtns  = document.querySelectorAll('.form-panel.active .btn-back');
-  if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.style.opacity = '0.5'; }
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = '0.5'; }
-  backBtns.forEach(b => { b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none'; });
-  showPatience('wf');
+  // Set every Qty Received input to 0
+  document.querySelectorAll('.wf-rcv').forEach(inp => {
+    inp.disabled = false;
+    inp.classList.remove('qty-locked', 'qty-over');
+    inp.value = 0;
+  });
 
-  try {
-    if (!wfFoundRecId) throw new Error('No active Request ID found. Please search again.');
+  // Set date collected to today if not already set
+  const dateCollEl = document.getElementById('wf-dateColl');
+  if (dateCollEl && !dateCollEl.value) dateCollEl.value = todayStr();
 
-    // Step 1: Get Request ID string and warehouse details
-    const mainRecs   = await atSearchByFormula(TBL.materialsRequest, 'RECORD_ID()="' + wfFoundRecId + '"');
-    const reqRecord  = mainRecs[0];
-    const reqIDStr   = reqRecord?.fields['Request ID'] || '';
-    if (!reqIDStr) throw new Error('Could not retrieve Request ID string from Airtable.');
-
-    const locOpt     = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
-    const locName    = locOpt?.dataset?.location || '';
-    const stateName  = document.getElementById('wf-state').value;
-    const stockField = getStockFieldName(stateName, locName);
-
-    // Step 2: Fetch all line items using lookup text field
-    const lineRecs = await atSearchByFormula(
-      TBL.materialsRequestLines,
-      '{Request ID (from Request)}="' + reqIDStr + '"'
-    );
-    console.log('Cancel: found ' + lineRecs.length + ' line(s) for ' + reqIDStr);
-    if (!lineRecs.length) throw new Error('No line items found for ' + reqIDStr + '.');
-
-    // Step 3: Collect line IDs for SSR unlink
-    const cancelledLineIds = lineRecs.map(l => l.id);
-
-    // Step 4: For each line — zero Qty Received, tick Order Cancelled,
-    //         return Qty Requested to warehouse stock
-    for (const line of lineRecs) {
-      const matId        = (line.fields['Material'] || [])[0];
-      const qtyRequested = parseInt(line.fields['Qty Requested']) || 0;
-
-      await atUpdate(TBL.materialsRequestLines, line.id, {
-        'fld8EiZWlMwlVNPPd': 0,      // Qty Received = 0
-        'fldwWddJe1NXJ5bdM': true,   // Order Cancelled = checked (Lines)
-      });
-
-      if (matId && qtyRequested > 0) {
-        const matRec    = CACHE.materials.find(r => r.id === matId);
-        const currStock = parseFloat(matRec?.fields?.[stockField] || 0);
-        const newStock  = currStock + qtyRequested;
-        await atUpdate(TBL.materialsQuantities, matId, { [stockField]: newStock });
-        if (matRec) matRec.fields[stockField] = newStock;
-        console.log('Returned ' + qtyRequested + ' of ' + matId + ' → stock now: ' + newStock);
-      }
-    }
-
-    // Step 5: Tick Order Cancelled + Date Collected on the header record
-    await atUpdate(TBL.materialsRequest, wfFoundRecId, {
-      [FLD.mr_dateColl]:   todayStr(),
-      'fldNMQL3eS1WAdOMm': true,   // Order Cancelled = checked (Header)
-    });
-
-    // Step 6: Remove the cancelled line IDs from SSR Materials Request Lines (Requested)
-    // Find all SSR rows that reference any of these line IDs, then remove them
-    try {
-      const allSsrRows = await atFetchAll(TBL.subcontractorStockReport, {
-        fields: ['Materials Request Lines (Requested)'],
-      });
-      const ssrToUpdate = allSsrRows.filter(row => {
-        const existing = row.fields['Materials Request Lines (Requested)'] || [];
-        return existing.some(id => cancelledLineIds.includes(id));
-      });
-      for (const ssrRow of ssrToUpdate) {
-        const existing = ssrRow.fields['Materials Request Lines (Requested)'] || [];
-        const updated  = existing.filter(id => !cancelledLineIds.includes(id));
-        await atUpdate(TBL.subcontractorStockReport, ssrRow.id, {
-          'fld9sxRu0sjgTIX5y': updated,   // Materials Request Lines (Requested)
-        });
-        console.log('SSR: removed ' + (existing.length - updated.length) + ' cancelled line(s) from row ' + ssrRow.id);
-      }
-    } catch(ssrErr) {
-      console.warn('SSR unlink warning:', ssrErr.message);
-    }
-
-    console.log('✅ Pick-up cancelled for ' + reqIDStr);
-    // Re-fetch the record AFTER all updates so Date Collected + Order Cancelled are included
-    try {
-      const freshMR = await atSearchByFormula(TBL.materialsRequest, 'RECORD_ID()="' + wfFoundRecId + '"');
-      if (freshMR[0]) triggerMRWebhook(freshMR[0]);
-    } catch(e) { console.warn('MR webhook on cancel:', e.message); }
-    
-    showSuccess('wf-success', '✔ Pick-up cancelled for ' + reqIDStr + '. All stock returned to warehouse. Returning to home screen…');
-
-    setTimeout(() => {
-      document.getElementById('formWorkforce').reset();
-      wfMode = 'new'; wfFoundRecId = null;
-      buildStateDropdown(document.getElementById('wf-state'));
-      buildCompanyDropdown(document.getElementById('wf-company'));
-      buildRepDropdown(document.getElementById('wf-rep'), '', document.getElementById('wf-email'), document.getElementById('wf-mobile'));
-      buildLocationDropdown(document.getElementById('wf-location'), '');
-      document.getElementById('wf-subsections').innerHTML = '';
-      document.getElementById('wf-searchStatus').style.display = 'none';
-      document.getElementById('wfgrp-dateColl').style.display = 'none';
-      document.getElementById('wf-notice').style.display = 'block';
-      document.getElementById('wf-submitBtn').textContent = 'Submit Request';
-      wfUnlockFields();
-      hidePatience('wf');
-      goBack();
-    }, 3000);
-
-  } catch(err) {
-    alert('Cancellation failed: ' + err.message);
-    console.error(err);
-    if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.style.opacity = ''; }
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = ''; }
-    backBtns.forEach(b => { b.disabled = false; b.style.opacity = ''; b.style.pointerEvents = ''; });
-    hidePatience('wf');
-  }
+  // Set cancel flag so submit flow knows to allow zero quantities + set Order Cancelled
+  wfCancelMode = true;
+  // Programmatically click the submit button — the existing receipt confirmation
+  // flow handles all Airtable updates, stock restoration, and Excel webhook
+  console.log('Cancel Pick-Up: zeroed all Qty Received, triggering submit…');
+  document.getElementById('wf-submitBtn').click();
 }
 
 async function triggerMRWebhook(record) {
