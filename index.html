@@ -509,8 +509,8 @@
             <input type="date" id="cr-date" required />
           </div>
           <div class="field-group">
-            <label for="cr-notes">Notes <span style="font-weight:400;color:var(--dark-50)">(optional)</span></label>
-            <input type="text" id="cr-notes" placeholder="Optional notes about this return" />
+            <label for="cr-notes">Reason for Return <span class="req">*</span></label>
+            <input type="text" id="cr-notes" placeholder="Enter the reason for this return" required />
           </div>
         </div>
         <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Stock to Return</span><div class="divider-line"></div></div>
@@ -550,8 +550,8 @@
             <input type="date" id="or-date" required />
           </div>
           <div class="field-group">
-            <label for="or-notes">Notes <span style="font-weight:400;color:var(--dark-50)">(optional)</span></label>
-            <input type="text" id="or-notes" placeholder="Optional notes about this return" />
+            <label for="or-notes">Reason for Return <span class="req">*</span></label>
+            <input type="text" id="or-notes" placeholder="Enter the reason for this return" required />
           </div>
         </div>
         <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Stock to Return</span><div class="divider-line"></div></div>
@@ -2930,6 +2930,7 @@ function buildOpticommDropdown(sel, selectedState) {
       const whLocRecId = crWhLocEl.value;
       const dateVal   = document.getElementById('cr-date').value;
       const notesVal  = document.getElementById('cr-notes').value.trim();
+      if (!notesVal) { alert('Please enter a Reason for Return.'); document.getElementById('cr-notes').focus(); return; }
       const whCacheRec = CACHE.warehouseByRecId[whLocRecId];
       const locationName = whCacheRec?.fields?.['Location'] || '';
 
@@ -2979,7 +2980,7 @@ function buildOpticommDropdown(sel, selectedState) {
           [FLD.csr_qtyReturned]:    item.qty,
           [FLD.csr_dateReturned]:   dateVal,
         };
-        if (notesVal)    csrFields[FLD.csr_notes] = notesVal;
+        csrFields[FLD.csr_notes] = notesVal;
         if (wsrRecordId) csrFields[FLD.csr_wsr]   = [wsrRecordId];
         if (ssrRecordId) csrFields[FLD.csr_ssr]   = [ssrRecordId];
 
@@ -3193,6 +3194,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
       const opticommRecId = orOpticommEl.value;
       const dateVal      = document.getElementById('or-date').value;
       const notesVal     = document.getElementById('or-notes').value.trim();
+      if (!notesVal) { alert('Please enter a Reason for Return.'); document.getElementById('or-notes').focus(); return; }
 
       const osrBatchFields = returnItems.map(item => {
         const f = {
@@ -3202,7 +3204,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
           [FLD.osr_qtyReturned]:  item.qty,
           [FLD.osr_dateReturned]: dateVal,
         };
-        if (notesVal)   f[FLD.osr_notes] = notesVal;
+        f[FLD.osr_notes] = notesVal;
         if (item.wsrId) f[FLD.osr_wsr]   = [item.wsrId];
         return f;
       });
