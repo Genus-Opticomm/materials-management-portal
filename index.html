@@ -855,6 +855,7 @@ async function sendSSRBatchToPA(repRecId) {
             'fldzxd5Odt0mpzDW8', // Report Key
             'fldc33IYWc8kgLdmN', // Full Name (from Representative)
             'fld0Cyg9IBXd8XXEH', // Company Name (from Representative)
+            'fldrbeZkBMPwpaOxg', // Inventory Code (from Material)
             'fldPpj5hGp4lbQugL', // OP Code
             'fldAZUYVyQ5gLWKWk', // IT Code
             'fld5YH3SMorI6dUFe', // Description
@@ -925,6 +926,7 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
           'fldAoLaJ2fPHr9Kax', // Full Name
           'fldvOMUgG8eY0uzWg', // Email
           'fld1zKoTmFi7w7CLV', // Mobile
+          'fld6Qsb3feNVsTsU7', // Inventory Code
           'fldMuQy4naImR0Qyf', // OP Code
           'fldWqgEITuvz4ZmWI', // IT Code
           'fldfPyfyxPtbIKMoz', // Description
@@ -1017,6 +1019,7 @@ async function sendCSRBatchToPA(repRecId) {
           'fldqI3bmSJZHkWisC', // Return Key
           'fldbXwagNxvCXyvu5', // Full Name (from Representative)
           'fldTfAfgtWmDNp3Rj', // Company (from Representative)
+          'fldYBCt4oqsKcSm66', // Inventory Code (from Material)
           'fldFKYSXDMHSZZrhZ', // OP Code (from Material)
           'fldZKjEPcbMSP13f5', // IT Code (from Material)
           'fldp94Tjgn4RQLGo4', // Description (from Material)
@@ -1090,6 +1093,7 @@ async function sendOSRBatchToPA(whLocRecId) {
           'fldkjvu5Q0sEXrUWk', // State (from Warehouse)
           'fldYQ6cd15ZYrXFBf', // Location (from Warehouse)
           'fldM6HxsQxete5toC', // Location (from Opticomm Warehouse)
+          'fldEh9ZCgOE4rpERq', // Inventory Code (from Material)
           'fldQvBHJpV0DwI7HD', // OP Code (from Material)
           'fldZFAs1x0R8IHTAe', // IT Code (from Material)
           'fldy9qIs4jM0XWWgX', // Description (from Material)
@@ -3568,12 +3572,31 @@ async function triggerMRWebhook(record) {
     return;
   }
   try {
+    // Re-fetch using field NAMES (not IDs) so Power Automate Parse JSON
+    // can reference fields by name as expected
+    const f = record.fields || {};
+    const namedRecord = {
+      id: record.id,
+      fields: {
+        'Request ID':                                    f['Request ID'] || f['fldFp2EmezFAZHnhz'] || '',
+        'Company Name (from Company)':                   f['Company Name (from Company)'] || f['fldhaMpIDwplxSKe1'] || [],
+        'Full Name (from Company Representative Name)':  f['Full Name (from Company Representative Name)'] || f['fldU3RguhnEnGmz5s'] || [],
+        'Email (from Email)':                            f['Email (from Email)'] || f['fldHhhhCw925iMquO'] || [],
+        'Mobile (from Mobile)':                          f['Mobile (from Mobile)'] || f['fldyHk6sALhB6WBcS'] || [],
+        'State (from Warehouse State)':                  f['State (from Warehouse State)'] || f['fldvzcnr1WgLV46iL'] || [],
+        'Location (from Warehouse Location)':            f['Location (from Warehouse Location)'] || f['fldnI9D9eUiqObB7y'] || [],
+        'Date Required':                                 f['Date Required'] || f['fld8sZCGLKGVBpkci'] || '',
+        'Date Collected':                                f['Date Collected'] || f['fld6QkfiXY5zhUFMs'] || '',
+        'Materials Request Lines':                       f['Materials Request Lines'] || f['fldZKTJKPFkzmMmu1'] || [],
+        'Order Cancelled':                               f['Order Cancelled'] || f['fldNMQL3eS1WAdOMm'] || false,
+      }
+    };
     await fetch(PA_MR_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ record }),
+      body: JSON.stringify({ record: namedRecord }),
     });
-    console.log('✅ MR webhook triggered for', record?.fields?.['Request ID'] || record?.id);
+    console.log('✅ MR webhook triggered for', namedRecord.fields['Request ID'] || record.id);
   } catch(err) {
     console.warn('MR webhook failed:', err.message);
   }
