@@ -509,8 +509,8 @@
             <input type="date" id="cr-date" required />
           </div>
           <div class="field-group">
-            <label for="cr-notes">Notes <span style="font-weight:400;color:var(--dark-50)">(optional)</span></label>
-            <input type="text" id="cr-notes" placeholder="Optional notes about this return" />
+            <label for="cr-notes">Reason for Return <span class="req">*</span></label>
+            <input type="text" id="cr-notes" placeholder="Enter the reason for this return" required />
           </div>
         </div>
         <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Stock to Return</span><div class="divider-line"></div></div>
@@ -550,8 +550,8 @@
             <input type="date" id="or-date" required />
           </div>
           <div class="field-group">
-            <label for="or-notes">Notes <span style="font-weight:400;color:var(--dark-50)">(optional)</span></label>
-            <input type="text" id="or-notes" placeholder="Optional notes about this return" />
+            <label for="or-notes">Reason for Return <span class="req">*</span></label>
+            <input type="text" id="or-notes" placeholder="Enter the reason for this return" required />
           </div>
         </div>
         <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Stock to Return</span><div class="divider-line"></div></div>
@@ -780,6 +780,7 @@ async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
             'fldD9D0Mku3AARN2L', // Warehouse Location
             'fldkGc6ZlyLopCzaL', // Warehouse Manager Name
             'fldrhZ9di7L69o1NP', // Warehouse Manager Email
+            'fldtwzSPIvOdnkev2', // Inventory Code
             'fldGU59f9JLc2vq9O', // OP Code
             'fldqf7cTEt9LW4bmB', // IT Code
             'fldqayVYTZkJ4cNRR', // Description
@@ -810,6 +811,7 @@ async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
         warehouseLocation:            u(f['fldD9D0Mku3AARN2L']),
         warehouseManagerName:         u(f['fldkGc6ZlyLopCzaL']),
         warehouseManagerEmail:        u(f['fldrhZ9di7L69o1NP']),
+        inventoryCode:                u(f['fldtwzSPIvOdnkev2']),
         opCode:                       u(f['fldGU59f9JLc2vq9O']),
         itCode:                       u(f['fldqf7cTEt9LW4bmB']),
         description:                  u(f['fldqayVYTZkJ4cNRR']),
@@ -971,11 +973,31 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
       };
     });
 
-    fetch(PA_SJR_WEBHOOK, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ records: payload }),
-    }).then(r => console.log(`✅ SJR batch sent: ${payload.length} record(s), status ${r.status}`))
-      .catch(err => console.warn('SJR PA batch failed:', err.message));
+    // Retry up to 3 times on 502/503 (transient Power Automate infrastructure errors)
+    let sjrSent = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const sjrRes = await fetch(PA_SJR_WEBHOOK, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ records: payload }),
+        });
+        if (sjrRes.ok || sjrRes.status === 202) {
+          console.log(`✅ SJR batch sent: ${payload.length} record(s), status ${sjrRes.status}`);
+          sjrSent = true;
+          break;
+        } else if (sjrRes.status === 502 || sjrRes.status === 503) {
+          console.warn(`SJR attempt ${attempt} got ${sjrRes.status} — retrying in 5s…`);
+          await new Promise(r => setTimeout(r, 5000));
+        } else {
+          console.warn(`SJR batch failed with status ${sjrRes.status}`);
+          break;
+        }
+      } catch(fetchErr) {
+        console.warn(`SJR attempt ${attempt} error:`, fetchErr.message);
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    }
+    if (!sjrSent) console.warn('SJR batch failed after 3 attempts — check Power Automate flow status');
   } catch(err) { console.warn('sendSJRBatchToPA error:', err.message); }
 }
 
@@ -2930,6 +2952,7 @@ function buildOpticommDropdown(sel, selectedState) {
       const whLocRecId = crWhLocEl.value;
       const dateVal   = document.getElementById('cr-date').value;
       const notesVal  = document.getElementById('cr-notes').value.trim();
+      if (!notesVal) { alert('Please enter a Reason for Return.'); document.getElementById('cr-notes').focus(); return; }
       const whCacheRec = CACHE.warehouseByRecId[whLocRecId];
       const locationName = whCacheRec?.fields?.['Location'] || '';
 
@@ -2979,7 +3002,7 @@ function buildOpticommDropdown(sel, selectedState) {
           [FLD.csr_qtyReturned]:    item.qty,
           [FLD.csr_dateReturned]:   dateVal,
         };
-        if (notesVal)    csrFields[FLD.csr_notes] = notesVal;
+        csrFields[FLD.csr_notes] = notesVal;
         if (wsrRecordId) csrFields[FLD.csr_wsr]   = [wsrRecordId];
         if (ssrRecordId) csrFields[FLD.csr_ssr]   = [ssrRecordId];
 
@@ -3193,6 +3216,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
       const opticommRecId = orOpticommEl.value;
       const dateVal      = document.getElementById('or-date').value;
       const notesVal     = document.getElementById('or-notes').value.trim();
+      if (!notesVal) { alert('Please enter a Reason for Return.'); document.getElementById('or-notes').focus(); return; }
 
       const osrBatchFields = returnItems.map(item => {
         const f = {
@@ -3202,7 +3226,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
           [FLD.osr_qtyReturned]:  item.qty,
           [FLD.osr_dateReturned]: dateVal,
         };
-        if (notesVal)   f[FLD.osr_notes] = notesVal;
+        f[FLD.osr_notes] = notesVal;
         if (item.wsrId) f[FLD.osr_wsr]   = [item.wsrId];
         return f;
       });
@@ -3253,6 +3277,7 @@ async function buildInvMaterialsTableFromWSR(containerId, whLocRecId, stateVal, 
           fields: [
             'fld2Ticr06WS5xSXS', // Current Stock On-Hand
             'fldJJJ5xer1KpiMuQ', // Bin ID
+            'fldtwzSPIvOdnkev2', // Inventory Code
             'fldGU59f9JLc2vq9O', // OP Code
             'fldqf7cTEt9LW4bmB', // IT Code
             'fldqayVYTZkJ4cNRR', // Description
@@ -3375,6 +3400,7 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
             'fldKtogSlya0m4AOW', // Warehouse State (lookup)
             'fldD9D0Mku3AARN2L', // Warehouse Location (lookup)
             'fldJJJ5xer1KpiMuQ', // Bin ID
+            'fldtwzSPIvOdnkev2', // Inventory Code
             'fldGU59f9JLc2vq9O', // OP Code
             'fldqf7cTEt9LW4bmB', // IT Code
             'fldqayVYTZkJ4cNRR', // Description
@@ -3400,12 +3426,13 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
       matIds.forEach(matId => {
         const id = matId && matId.id ? matId.id : matId;
         wsrMap[id] = {
-          wsrRecId: row.id,
-          onhand: Math.max(0, onhand),
-          binId:  f['fldJJJ5xer1KpiMuQ'] ? (Array.isArray(f['fldJJJ5xer1KpiMuQ']) ? f['fldJJJ5xer1KpiMuQ'][0] : f['fldJJJ5xer1KpiMuQ']) : '—',
-          opCode: f['fldGU59f9JLc2vq9O'] ? (Array.isArray(f['fldGU59f9JLc2vq9O']) ? f['fldGU59f9JLc2vq9O'][0] : f['fldGU59f9JLc2vq9O']) : '—',
-          itCode: f['fldqf7cTEt9LW4bmB'] ? (Array.isArray(f['fldqf7cTEt9LW4bmB']) ? f['fldqf7cTEt9LW4bmB'][0] : f['fldqf7cTEt9LW4bmB']) : '—',
-          desc:   f['fldqayVYTZkJ4cNRR'] ? (Array.isArray(f['fldqayVYTZkJ4cNRR']) ? f['fldqayVYTZkJ4cNRR'][0] : f['fldqayVYTZkJ4cNRR']) : '—',
+          wsrRecId:      row.id,
+          onhand:        Math.max(0, onhand),
+          binId:         f['fldJJJ5xer1KpiMuQ'] ? (Array.isArray(f['fldJJJ5xer1KpiMuQ']) ? f['fldJJJ5xer1KpiMuQ'][0] : f['fldJJJ5xer1KpiMuQ']) : '—',
+          inventoryCode: f['fldtwzSPIvOdnkev2'] ? (Array.isArray(f['fldtwzSPIvOdnkev2']) ? f['fldtwzSPIvOdnkev2'][0] : f['fldtwzSPIvOdnkev2']) : '—',
+          opCode:        f['fldGU59f9JLc2vq9O'] ? (Array.isArray(f['fldGU59f9JLc2vq9O']) ? f['fldGU59f9JLc2vq9O'][0] : f['fldGU59f9JLc2vq9O']) : '—',
+          itCode:        f['fldqf7cTEt9LW4bmB'] ? (Array.isArray(f['fldqf7cTEt9LW4bmB']) ? f['fldqf7cTEt9LW4bmB'][0] : f['fldqf7cTEt9LW4bmB']) : '—',
+          desc:          f['fldqayVYTZkJ4cNRR'] ? (Array.isArray(f['fldqayVYTZkJ4cNRR']) ? f['fldqayVYTZkJ4cNRR'][0] : f['fldqayVYTZkJ4cNRR']) : '—',
         };
       });
     });
