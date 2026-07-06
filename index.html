@@ -971,11 +971,31 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
       };
     });
 
-    fetch(PA_SJR_WEBHOOK, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ records: payload }),
-    }).then(r => console.log(`✅ SJR batch sent: ${payload.length} record(s), status ${r.status}`))
-      .catch(err => console.warn('SJR PA batch failed:', err.message));
+    // Retry up to 3 times on 502/503 (transient Power Automate infrastructure errors)
+    let sjrSent = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const sjrRes = await fetch(PA_SJR_WEBHOOK, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ records: payload }),
+        });
+        if (sjrRes.ok || sjrRes.status === 202) {
+          console.log(`✅ SJR batch sent: ${payload.length} record(s), status ${sjrRes.status}`);
+          sjrSent = true;
+          break;
+        } else if (sjrRes.status === 502 || sjrRes.status === 503) {
+          console.warn(`SJR attempt ${attempt} got ${sjrRes.status} — retrying in 5s…`);
+          await new Promise(r => setTimeout(r, 5000));
+        } else {
+          console.warn(`SJR batch failed with status ${sjrRes.status}`);
+          break;
+        }
+      } catch(fetchErr) {
+        console.warn(`SJR attempt ${attempt} error:`, fetchErr.message);
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    }
+    if (!sjrSent) console.warn('SJR batch failed after 3 attempts — check Power Automate flow status');
   } catch(err) { console.warn('sendSJRBatchToPA error:', err.message); }
 }
 
