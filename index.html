@@ -1774,7 +1774,7 @@ function goBack() {
       document.getElementById('inv-subsections').innerHTML = '';
       notice.style.display = 'block';
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit'); hidePatience('inv'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit'); }
   });
 })();
 
@@ -1859,8 +1859,6 @@ let wfFoundRecId = null;
 
         if (rcvItems.length === 0) {
           alert("Please enter at least one Qty Received.");
-          hidePatience('wf');
-          btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request');
           return;
         }
 
@@ -1889,6 +1887,30 @@ let wfFoundRecId = null;
             if (wfCancelMode) lineFields['fldwWddJe1NXJ5bdM'] = true; // Order Cancelled
             await atUpdate(TBL.materialsRequestLines, matchingLine.id, lineFields);
             console.log(`Updated Qty Received for material ${item.recId}${wfCancelMode ? ' (Order Cancelled)' : ''}`);
+
+            // Update SSReq_Data row via direct webhook
+            try {
+              const rcvMat      = CACHE.materials.find(r => r.id === item.recId);
+              const rcvInvCode  = rcvMat?.fields?.['Inventory Code'] || '';
+              const rcvRepName  = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
+              const rcvReqId    = document.getElementById('wf-reqId').value.trim().toUpperCase() || reqIDStr;
+              const rcvLoc      = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex]?.dataset?.location || '';
+              const rcvReportKey = `${rcvReqId} | ${rcvLoc} | ${rcvRepName} | ${rcvInvCode}`;
+              await triggerSSReqWebhook({
+                lineId:                        matchingLine.id,
+                'Report Key':                  rcvReportKey,
+                'Request ID':                  rcvReqId,
+                'Company Name':                document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '',
+                'Company Representative Name': rcvRepName,
+                'Location':                    rcvLoc,
+                'Date Required':               document.getElementById('wf-dateReq').value,
+                'Date Collected':              document.getElementById('wf-dateColl').value,
+                'Product Description':         rcvMat?.fields?.['Description'] || '',
+                'Qty Requested':               parseInt(matchingLine.fields?.['Qty Requested']) || item.qtyReceived,
+                'Qty Received':                item.qtyReceived,
+                'Order Cancelled':             wfCancelMode ? 'Yes' : 'No',
+              });
+            } catch(ssreqErr) { console.warn('SSReq receipt webhook error:', ssreqErr.message); }
           }
 
           // Stock adjustment: Return (Requested - Received) back to warehouse
@@ -2052,6 +2074,31 @@ let wfFoundRecId = null;
             createdMrlLines.push({ mrlId: lineRecord.id, matRecId: item.recId });
             console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
 
+            // Fire SSReq webhook immediately — much faster than Airtable automation
+            try {
+              const mrlMat    = CACHE.materials.find(r => r.id === item.recId);
+              const mrlDesc   = mrlMat?.fields?.['Description'] || '';
+              const mrlInvCode= mrlMat?.fields?.['Inventory Code'] || mrlMat?.fields?.['fldlcZdYoSPwCWTvMFormula'] || '';
+              const mrlRepName= document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
+              const mrlReqId  = document.getElementById('wf-reqId').value.trim().toUpperCase() || '';
+              const mrlLoc    = wfLocName;
+              const mrlReportKey = `${mrlReqId} | ${mrlLoc} | ${mrlRepName} | ${mrlInvCode}`;
+              await triggerSSReqWebhook({
+                lineId:                        lineRecord.id,
+                'Report Key':                  mrlReportKey,
+                'Request ID':                  mrlReqId,
+                'Company Name':                document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '',
+                'Company Representative Name': mrlRepName,
+                'Location':                    mrlLoc,
+                'Date Required':               document.getElementById('wf-dateReq').value,
+                'Date Collected':              '',
+                'Product Description':         mrlDesc,
+                'Qty Requested':               item.qty,
+                'Qty Received':                0,
+                'Order Cancelled':             'No',
+              });
+            } catch(ssreqErr) { console.warn('SSReq webhook error:', ssreqErr.message); }
+
             // Find or create WSR row and link this line to it (both Requested + Collected links)
             const wfMatRec = CACHE.materials.find(r => r.id === item.recId);
             const wfBinId  = wfMatRec?.fields?.['Bin ID'] || '';
@@ -2214,7 +2261,7 @@ let wfFoundRecId = null;
       btn.textContent = 'Submit Request';
       wfUnlockFields();
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); hidePatience('wf'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); }
   });
 })();
 
@@ -2626,7 +2673,6 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       alert('Submission failed: ' + err.message); 
       console.error(err);
       btnReset(btn, 'Submit Daily Record');
-      hidePatience('dm');
     }
 });
 })();
@@ -3039,7 +3085,7 @@ function buildOpticommDropdown(sel, selectedState) {
       document.getElementById('cr-subsections').innerHTML = '';
       crNotice.style.display = 'block';
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); hidePatience('csr'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); }
   });
 })();
 
@@ -3264,7 +3310,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
       document.getElementById('or-subsections').innerHTML = '';
       orNotice.style.display = 'block';
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); hidePatience('osr'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); }
   });
 })();
 
@@ -3602,6 +3648,22 @@ async function triggerMRWebhook(record) {
     console.log('✅ MR webhook triggered for', namedRecord.fields['Request ID'] || record.id);
   } catch(err) {
     console.warn('MR webhook failed:', err.message);
+  }
+}
+
+// ── SSReq webhook — fires per line item immediately after creation ─────────
+// Sends directly to Power Automate bypassing slow Airtable automation trigger
+async function triggerSSReqWebhook(payload) {
+  if (typeof PA_MR_WEBHOOK === 'undefined' || !PA_MR_WEBHOOK) return;
+  try {
+    await fetch(PA_MR_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ record: { id: payload.lineId, fields: payload } }),
+    });
+    console.log('✅ SSReq webhook fired for', payload['Report Key']);
+  } catch(err) {
+    console.warn('SSReq webhook failed:', err.message);
   }
 }
 </script>
