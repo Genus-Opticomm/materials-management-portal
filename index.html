@@ -1847,8 +1847,8 @@ let wfFoundRecId = null;
         // === CONFIRM RECEIPT ===
         const rcvItems = [];
         document.querySelectorAll('.wf-rcv').forEach(inp => {
+          if (!inp.dataset.record) return;
           const qty = parseInt(inp.value) || 0;
-          // In cancel mode include all items (even 0) so stock can be restored
           if (qty > 0 || wfCancelMode) {
             rcvItems.push({ 
               recId: inp.dataset.record, 
@@ -1888,19 +1888,19 @@ let wfFoundRecId = null;
             await atUpdate(TBL.materialsRequestLines, matchingLine.id, lineFields);
             console.log(`Updated Qty Received for material ${item.recId}${wfCancelMode ? ' (Order Cancelled)' : ''}`);
 
-            // Update SSReq_Data row via direct webhook
+            // Update SSReq_Data via direct webhook
             try {
-              const rcvMat      = CACHE.materials.find(r => r.id === item.recId);
-              const rcvInvCode  = rcvMat?.fields?.['Inventory Code'] || '';
-              const rcvRepName  = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
-              const rcvReqId    = document.getElementById('wf-reqId').value.trim().toUpperCase() || reqIDStr;
-              const rcvLoc      = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex]?.dataset?.location || '';
-              const rcvReportKey = `${rcvReqId} | ${rcvLoc} | ${rcvRepName} | ${rcvInvCode}`;
+              const rcvMat     = CACHE.materials.find(r => r.id === item.recId);
+              const rcvInvCode = rcvMat?.fields?.['Inventory Code'] || '';
+              const rcvRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
+              const rcvCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
+              const rcvLoc     = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex]?.dataset?.location || '';
+              const rcvReportKey = `${reqIDStr} | ${rcvLoc} | ${rcvRepName} | ${rcvInvCode}`;
               await triggerSSReqWebhook({
                 lineId:                        matchingLine.id,
                 'Report Key':                  rcvReportKey,
-                'Request ID':                  rcvReqId,
-                'Company Name':                document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '',
+                'Request ID':                  reqIDStr,
+                'Company Name':                rcvCompany,
                 'Company Representative Name': rcvRepName,
                 'Location':                    rcvLoc,
                 'Date Required':               document.getElementById('wf-dateReq').value,
@@ -2025,12 +2025,6 @@ let wfFoundRecId = null;
           sendWSRBatchToPA(locRecId, locName, stateName);
         }, 8000);
 
-        // Trigger MR webhook so Date Collected updates in SSReq_Data Excel
-        try {
-          const updatedMR = await atSearchByFormula(TBL.materialsRequest, `RECORD_ID()="${wfFoundRecId}"`);
-          if (updatedMR[0]) triggerMRWebhook(updatedMR[0]);
-        } catch(e) { console.warn('MR webhook on receipt:', e.message); }
-
       showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
       } else {
         // === NEW MATERIALS REQUEST ===
@@ -2057,6 +2051,17 @@ let wfFoundRecId = null;
         const mainRequestId = newRequest.id;
         const createdMrlLines = []; // collect { mrlId, matRecId } for SSR population
 
+        // Fetch the Request ID formula field (computed by Airtable, not in create response)
+        let mrlRequestIdStr = '';
+        try {
+          const reqIdFetch = await atFetchAll(TBL.materialsRequest, {
+            filterByFormula: `RECORD_ID()="${mainRequestId}"`,
+            fields: ['Request ID'],
+          });
+          mrlRequestIdStr = reqIdFetch[0]?.fields?.['Request ID'] || '';
+          console.log('Request ID fetched:', mrlRequestIdStr);
+        } catch(e) { console.warn('Could not fetch Request ID:', e.message); }
+
         // === CREATE LINE ITEMS (using Field IDs for safety) ===
         console.log('Creating', reqItems.length, 'line items for request', mainRequestId);
         
@@ -2074,25 +2079,23 @@ let wfFoundRecId = null;
             createdMrlLines.push({ mrlId: lineRecord.id, matRecId: item.recId });
             console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
 
-            // Fire SSReq webhook immediately — much faster than Airtable automation
+            // Fire SSReq webhook immediately using Airtable-generated Request ID
             try {
-              const mrlMat    = CACHE.materials.find(r => r.id === item.recId);
-              const mrlDesc   = mrlMat?.fields?.['Description'] || '';
-              const mrlInvCode= mrlMat?.fields?.['Inventory Code'] || mrlMat?.fields?.['fldlcZdYoSPwCWTvMFormula'] || '';
-              const mrlRepName= document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
-              const mrlReqId  = document.getElementById('wf-reqId').value.trim().toUpperCase() || '';
-              const mrlLoc    = wfLocName;
-              const mrlReportKey = `${mrlReqId} | ${mrlLoc} | ${mrlRepName} | ${mrlInvCode}`;
+              const mrlMat     = CACHE.materials.find(r => r.id === item.recId);
+              const mrlInvCode = mrlMat?.fields?.['Inventory Code'] || '';
+              const mrlRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
+              const mrlCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
+              const mrlReportKey = `${mrlRequestIdStr} | ${wfLocName} | ${mrlRepName} | ${mrlInvCode}`;
               await triggerSSReqWebhook({
                 lineId:                        lineRecord.id,
                 'Report Key':                  mrlReportKey,
-                'Request ID':                  mrlReqId,
-                'Company Name':                document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '',
+                'Request ID':                  mrlRequestIdStr,
+                'Company Name':                mrlCompany,
                 'Company Representative Name': mrlRepName,
-                'Location':                    mrlLoc,
+                'Location':                    wfLocName,
                 'Date Required':               document.getElementById('wf-dateReq').value,
                 'Date Collected':              '',
-                'Product Description':         mrlDesc,
+                'Product Description':         mrlMat?.fields?.['Description'] || '',
                 'Qty Requested':               item.qty,
                 'Qty Received':                0,
                 'Order Cancelled':             'No',
@@ -2237,12 +2240,6 @@ let wfFoundRecId = null;
           sendSSRBatchToPA(repRecId);
           sendWSRBatchToPA(locRecId, wfLocName, stateName);
         }, 8000);
-
-        // Trigger MR webhook so new row appears in SSReq_Data Excel
-        try {
-          const mrRecord = await atSearchByFormula(TBL.materialsRequest, `RECORD_ID()="${mainRequestId}"`);
-          if (mrRecord[0]) triggerMRWebhook(mrRecord[0]);
-        } catch(e) { console.warn('MR webhook on new request:', e.message); }
 
         showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items). Returning to home screen…`);
       }
@@ -3596,11 +3593,12 @@ async function wfCancelPickup() {
     'This action cannot be undone.'
   )) return;
 
-  // Set every Qty Received input to 0
+  // Only zero Qty Received inputs that belong to the found request
   document.querySelectorAll('.wf-rcv').forEach(inp => {
+    if (!inp.dataset.record) return;
     inp.disabled = false;
-    inp.classList.remove('qty-locked', 'qty-over');
-    inp.value = 0;
+    inp.classList.remove('qty-locked', 'qty-locked-value', 'qty-over');
+    inp.value = '';
   });
 
   // Set date collected to today if not already set
