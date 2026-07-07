@@ -1888,19 +1888,19 @@ let wfFoundRecId = null;
             await atUpdate(TBL.materialsRequestLines, matchingLine.id, lineFields);
             console.log(`Updated Qty Received for material ${item.recId}${wfCancelMode ? ' (Order Cancelled)' : ''}`);
 
-            // Update SSReq_Data via direct webhook
+            // Update SSReq_Data row via direct webhook
             try {
-              const rcvMat     = CACHE.materials.find(r => r.id === item.recId);
-              const rcvInvCode = rcvMat?.fields?.['Inventory Code'] || '';
-              const rcvRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
-              const rcvCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
-              const rcvLoc     = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex]?.dataset?.location || '';
-              const rcvReportKey = `${reqIDStr} | ${rcvLoc} | ${rcvRepName} | ${rcvInvCode}`;
+              const rcvMat      = CACHE.materials.find(r => r.id === item.recId);
+              const rcvInvCode  = rcvMat?.fields?.['Inventory Code'] || '';
+              const rcvRepName  = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
+              const rcvReqId    = document.getElementById('wf-reqId').value.trim().toUpperCase() || reqIDStr;
+              const rcvLoc      = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex]?.dataset?.location || '';
+              const rcvReportKey = `${rcvReqId} | ${rcvLoc} | ${rcvRepName} | ${rcvInvCode}`;
               await triggerSSReqWebhook({
                 lineId:                        matchingLine.id,
                 'Report Key':                  rcvReportKey,
-                'Request ID':                  reqIDStr,
-                'Company Name':                rcvCompany,
+                'Request ID':                  rcvReqId,
+                'Company Name':                document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '',
                 'Company Representative Name': rcvRepName,
                 'Location':                    rcvLoc,
                 'Date Required':               document.getElementById('wf-dateReq').value,
@@ -2057,17 +2057,6 @@ let wfFoundRecId = null;
         const mainRequestId = newRequest.id;
         const createdMrlLines = []; // collect { mrlId, matRecId } for SSR population
 
-        // Fetch the Request ID formula field (computed by Airtable, not in create response)
-        let mrlRequestIdStr = '';
-        try {
-          const reqIdFetch = await atFetchAll(TBL.materialsRequest, {
-            filterByFormula: `RECORD_ID()="${mainRequestId}"`,
-            fields: ['Request ID'],
-          });
-          mrlRequestIdStr = reqIdFetch[0]?.fields?.['Request ID'] || '';
-          console.log('Request ID fetched:', mrlRequestIdStr);
-        } catch(e) { console.warn('Could not fetch Request ID:', e.message); }
-
         // === CREATE LINE ITEMS (using Field IDs for safety) ===
         console.log('Creating', reqItems.length, 'line items for request', mainRequestId);
         
@@ -2085,23 +2074,25 @@ let wfFoundRecId = null;
             createdMrlLines.push({ mrlId: lineRecord.id, matRecId: item.recId });
             console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
 
-            // Fire SSReq webhook immediately using Airtable-generated Request ID
+            // Fire SSReq webhook immediately — much faster than Airtable automation
             try {
-              const mrlMat     = CACHE.materials.find(r => r.id === item.recId);
-              const mrlInvCode = mrlMat?.fields?.['Inventory Code'] || '';
-              const mrlRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
-              const mrlCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
-              const mrlReportKey = `${mrlRequestIdStr} | ${wfLocName} | ${mrlRepName} | ${mrlInvCode}`;
+              const mrlMat    = CACHE.materials.find(r => r.id === item.recId);
+              const mrlDesc   = mrlMat?.fields?.['Description'] || '';
+              const mrlInvCode= mrlMat?.fields?.['Inventory Code'] || mrlMat?.fields?.['fldlcZdYoSPwCWTvMFormula'] || '';
+              const mrlRepName= document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
+              const mrlReqId  = document.getElementById('wf-reqId').value.trim().toUpperCase() || '';
+              const mrlLoc    = wfLocName;
+              const mrlReportKey = `${mrlReqId} | ${mrlLoc} | ${mrlRepName} | ${mrlInvCode}`;
               await triggerSSReqWebhook({
                 lineId:                        lineRecord.id,
                 'Report Key':                  mrlReportKey,
-                'Request ID':                  mrlRequestIdStr,
-                'Company Name':                mrlCompany,
+                'Request ID':                  mrlReqId,
+                'Company Name':                document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '',
                 'Company Representative Name': mrlRepName,
-                'Location':                    wfLocName,
+                'Location':                    mrlLoc,
                 'Date Required':               document.getElementById('wf-dateReq').value,
                 'Date Collected':              '',
-                'Product Description':         mrlMat?.fields?.['Description'] || '',
+                'Product Description':         mrlDesc,
                 'Qty Requested':               item.qty,
                 'Qty Received':                0,
                 'Order Cancelled':             'No',
