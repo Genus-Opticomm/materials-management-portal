@@ -1847,7 +1847,9 @@ let wfFoundRecId = null;
         // === CONFIRM RECEIPT ===
         const rcvItems = [];
         document.querySelectorAll('.wf-rcv').forEach(inp => {
-          if (!inp.dataset.record) return;
+          // Only process inputs enabled by loadRequestLineItems (the active request's lines)
+          // All wf-rcv inputs have data-record set to material ID, so use disabled state
+          if (inp.disabled) return;
           const qty = parseInt(inp.value) || 0;
           if (qty > 0 || wfCancelMode) {
             rcvItems.push({ 
@@ -3593,10 +3595,10 @@ async function wfCancelPickup() {
     'This action cannot be undone.'
   )) return;
 
-  // Only zero Qty Received inputs that belong to the found request
-  document.querySelectorAll('.wf-rcv').forEach(inp => {
-    if (!inp.dataset.record) return;
-    inp.disabled = false;
+  // Only zero Qty Received inputs that are enabled (activated by loadRequestLineItems)
+  // All 75 wf-rcv inputs have data-record set to the material ID, so we must
+  // use disabled state to distinguish request line items from unrelated rows
+  document.querySelectorAll('.wf-rcv:not([disabled])').forEach(inp => {
     inp.classList.remove('qty-locked', 'qty-locked-value', 'qty-over');
     inp.value = '';
   });
