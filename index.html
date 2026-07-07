@@ -1558,76 +1558,10 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
   });
 });
 function goBack() {
-  // Reset Inventory Received
-  try {
-    document.getElementById('formInventory').reset();
-    document.getElementById('inv-date').value = todayStr();
-    const invState = document.getElementById('inv-state');
-    buildStateDropdown(invState);
-    buildLocationDropdown(document.getElementById('inv-location'), '');
-    document.getElementById('inv-manager').value = '';
-    document.getElementById('inv-subsections').innerHTML = '';
-    document.getElementById('inv-notice').style.display = 'block';
-  } catch(e) {}
-
-  // Reset Field Workforce Materials Request
-  try {
-    document.getElementById('formWorkforce').reset();
-    document.getElementById('wf-searchStatus').style.display = 'none';
-    document.getElementById('wf-reqId').value = '';
-    buildStateDropdown(document.getElementById('wf-state'));
-    buildLocationDropdown(document.getElementById('wf-location'), '');
-    buildCompanyDropdown(document.getElementById('wf-company'));
-    buildRepDropdown(document.getElementById('wf-rep'), '', document.getElementById('wf-email'), document.getElementById('wf-mobile'));
-    document.getElementById('wf-subsections').innerHTML = '';
-    document.getElementById('wf-notice').style.display = 'block';
-    document.getElementById('wfgrp-dateColl').style.display = 'none';
-    hidePatience('wf');
-    document.getElementById('wf-submitBtn').textContent = 'Submit Request';
-    wfMode = 'new'; wfFoundRecId = null;
-    wfUnlockFields();
-    setQtyMode('request');
-  } catch(e) {}
-
-  // Reset Daily Materials Used
-  try {
-    document.getElementById('formDaily').reset();
-    document.getElementById('dm-date').value = todayStr();
-    document.getElementById('dm-jobcode').value = '';
-    document.getElementById('dm-jobcode-suffix').value = '';
-    buildCompanyDropdown(document.getElementById('dm-company'));
-    buildRepDropdown(document.getElementById('dm-rep'), '', document.getElementById('dm-email'), document.getElementById('dm-mobile'));
-    document.getElementById('dm-subsections').innerHTML = '';
-    document.getElementById('dm-notice').style.display = 'block';
-  } catch(e) {}
-
-  // Reset Contractor Stock Return
-  try {
-    document.getElementById('formContractorReturn').reset();
-    document.getElementById('cr-date').value = todayStr();
-    buildCompanyDropdown(document.getElementById('cr-company'));
-    buildRepDropdown(document.getElementById('cr-rep'), '', null, null);
-    document.getElementById('cr-subsections').innerHTML = '';
-    document.getElementById('cr-notice').style.display = 'block';
-    buildStateDropdown(document.getElementById('cr-wh-state'));
-    buildLocationDropdown(document.getElementById('cr-wh-location'), '');
-  } catch(e) {}
-
-  // Reset Opticomm Stock Return
-  try {
-    document.getElementById('formOpticommReturn').reset();
-    document.getElementById('or-date').value = todayStr();
-    buildStateDropdown(document.getElementById('or-wh-state'));
-    buildLocationDropdown(document.getElementById('or-wh-location'), '');
-    buildOpticommDropdown(document.getElementById('or-opticomm-wh'), '');
-    document.getElementById('or-subsections').innerHTML = '';
-    document.getElementById('or-notice').style.display = 'block';
-  } catch(e) {}
-
-  document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => { b.style.display=''; b.classList.remove('active'); });
+  // Reload the page for a completely clean state — avoids stale form data,
+  // lingering patience notices, and greyed-out buttons on re-entry
+  window.location.reload();
 }
-
 // ═══════════════════════════════════════════════════
 //  INVENTORY RECEIVED
 // ═══════════════════════════════════════════════════
@@ -1774,7 +1708,7 @@ function goBack() {
       document.getElementById('inv-subsections').innerHTML = '';
       notice.style.display = 'block';
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit'); hidePatience('inv'); }
   });
 })();
 
@@ -1859,6 +1793,8 @@ let wfFoundRecId = null;
 
         if (rcvItems.length === 0) {
           alert("Please enter at least one Qty Received.");
+          hidePatience('wf');
+          btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request');
           return;
         }
 
@@ -2212,7 +2148,7 @@ let wfFoundRecId = null;
       btn.textContent = 'Submit Request';
       wfUnlockFields();
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); hidePatience('wf'); }
   });
 })();
 
@@ -2624,6 +2560,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       alert('Submission failed: ' + err.message); 
       console.error(err);
       btnReset(btn, 'Submit Daily Record');
+      hidePatience('dm');
     }
 });
 })();
@@ -3036,7 +2973,7 @@ function buildOpticommDropdown(sel, selectedState) {
       document.getElementById('cr-subsections').innerHTML = '';
       crNotice.style.display = 'block';
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); hidePatience('csr'); }
   });
 })();
 
@@ -3261,7 +3198,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
       document.getElementById('or-subsections').innerHTML = '';
       orNotice.style.display = 'block';
       setTimeout(() => goBack(), 3000);
-    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); }
+    } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); hidePatience('osr'); }
   });
 })();
 
