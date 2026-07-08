@@ -152,7 +152,7 @@
   <div class="form-switcher">
     <h2>Select Operation</h2>
     <div class="nav-groups" id="navButtons">
-      <div class="nav-group">
+      <div class="nav-group" id="nav-group-warehouse">
         <div class="nav-group-label">Warehouse</div>
         <div class="nav-buttons nav-row-main">
           <button class="nav-btn" data-target="panel-inventory">Inventory Received</button>
@@ -161,7 +161,7 @@
           <button class="nav-btn nav-btn-return" data-target="panel-opticomm-return">Opticomm Stock Return</button>
         </div>
       </div>
-      <div class="nav-group">
+      <div class="nav-group" id="nav-group-field">
         <div class="nav-group-label">Field</div>
         <div class="nav-buttons nav-row-main">
           <button class="nav-btn" data-target="panel-workforce">Field Workforce Materials Request</button>
@@ -3666,6 +3666,20 @@ async function triggerSSReqWebhook(payload) {
     console.warn('SSReq webhook failed:', err.message);
   }
 }
+
+// ── Subcontractor view — hide warehouse buttons if ?view=sub in URL ───────
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'sub') return;
+  // Runs immediately — nav groups are defined in HTML above this script
+  const warehouseGroup = document.getElementById('nav-group-warehouse');
+  const fieldGroup     = document.getElementById('nav-group-field');
+  if (warehouseGroup) warehouseGroup.style.display = 'none';
+  if (fieldGroup) {
+    fieldGroup.style.flex = '1 1 100%';
+    fieldGroup.style.maxWidth = '820px'; // match nav-groups max-width for full span
+  }
+})();
 </script>
 </body>
 </html>
