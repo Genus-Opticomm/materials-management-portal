@@ -3667,17 +3667,20 @@ async function triggerSSReqWebhook(payload) {
   }
 }
 
-// ── Subcontractor view — hide warehouse buttons if ?view=sub in URL ───────
+// ── View control — default is subcontractor (field only)
+// Warehouse group only shown with ?view=WarehouseManagement ───────────────
 (function() {
   const params = new URLSearchParams(window.location.search);
-  if (params.get('view') !== 'sub') return;
-  // Runs immediately — nav groups are defined in HTML above this script
+  const isWarehouse = params.get('view') === 'WarehouseManagement';
   const warehouseGroup = document.getElementById('nav-group-warehouse');
   const fieldGroup     = document.getElementById('nav-group-field');
-  if (warehouseGroup) warehouseGroup.style.display = 'none';
-  if (fieldGroup) {
-    fieldGroup.style.flex = '1 1 100%';
-    fieldGroup.style.maxWidth = '820px'; // match nav-groups max-width for full span
+  if (!isWarehouse) {
+    // Subcontractor default — hide warehouse buttons, expand field group
+    if (warehouseGroup) warehouseGroup.style.display = 'none';
+    if (fieldGroup) {
+      fieldGroup.style.flex = '1 1 100%';
+      fieldGroup.style.maxWidth = '820px';
+    }
   }
 })();
 </script>
