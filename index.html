@@ -1713,16 +1713,29 @@ function goBack() {
         if (qty > 0) lineItems.push({ recId: inp.dataset.record, qty, field: inp.dataset.field, stock: parseInt(inp.dataset.stock)||0 });
       });
 
-      // ── Step A: Create Inventory Received header record ─────────────────
-      const invRecord = await atCreate(TBL.inventory, {
-        [FLD.inv_date]:      document.getElementById('inv-date').value,
-        [FLD.inv_whState]:   [locRecId],
-        [FLD.inv_whLoc]:     [locRecId],
-        [FLD.inv_docket]:    document.getElementById('inv-docket').value,
-        [FLD.inv_lineCount]: lineItems.length,
-        [FLD.inv_manager]:   [locRecId],
+      // ── Step A: Create Inventory Received header record (idempotent) ───────
+      const invKey = crypto.randomUUID();
+      // Check if this submission already exists (handles double-tap / retry)
+      let invRecordId;
+      const invExisting = await atFetchAll(TBL.inventory, {
+        filterByFormula: `{Submission Key}="${invKey}"`,
+        fields: ['Submission Key'],
       });
-      const invRecordId = invRecord.id;
+      if (invExisting.length > 0) {
+        invRecordId = invExisting[0].id;
+        console.log('INV: existing record found, skipping create:', invRecordId);
+      } else {
+        const invRecord = await atCreate(TBL.inventory, {
+          [FLD.inv_date]:      document.getElementById('inv-date').value,
+          [FLD.inv_whState]:   [locRecId],
+          [FLD.inv_whLoc]:     [locRecId],
+          [FLD.inv_docket]:    document.getElementById('inv-docket').value,
+          [FLD.inv_lineCount]: lineItems.length,
+          [FLD.inv_manager]:   [locRecId],
+          'fldFamvZSjCbazHOM': invKey,   // Submission Key
+        });
+        invRecordId = invRecord.id;
+      }
 
       const whCacheRec   = CACHE.warehouseByRecId[locRecId];
       const locationName = whCacheRec?.fields?.['Location'] || '';
@@ -2063,19 +2076,30 @@ let wfFoundRecId = null;
           }
         });
 
-        // Create the main request record
-        const newRequest = await atCreate(TBL.materialsRequest, {
-          [FLD.mr_company]:     [compRecId],     // Company Name field
-          [FLD.mr_rep]:         [repRecId],      // Representative
-          [FLD.mr_email]:       [repRecId],      // ← Add this
-          [FLD.mr_mobile]:      [repRecId],      // ← Add this
-          [FLD.mr_whState]:     [locRecId],
-          [FLD.mr_whLoc]:       [locRecId],
-          [FLD.mr_dateReq]:     document.getElementById('wf-dateReq').value,
-          [FLD.mr_lineCount]:   reqItems.length,
+        // Create the main request record (idempotent)
+        const wfKey = crypto.randomUUID();
+        let mainRequestId;
+        const wfExisting = await atFetchAll(TBL.materialsRequest, {
+          filterByFormula: `{Submission Key}="${wfKey}"`,
+          fields: ['Submission Key'],
         });
-
-        const mainRequestId = newRequest.id;
+        if (wfExisting.length > 0) {
+          mainRequestId = wfExisting[0].id;
+          console.log('WF: existing record found, skipping create:', mainRequestId);
+        } else {
+          const newRequest = await atCreate(TBL.materialsRequest, {
+            [FLD.mr_company]:     [compRecId],
+            [FLD.mr_rep]:         [repRecId],
+            [FLD.mr_email]:       [repRecId],
+            [FLD.mr_mobile]:      [repRecId],
+            [FLD.mr_whState]:     [locRecId],
+            [FLD.mr_whLoc]:       [locRecId],
+            [FLD.mr_dateReq]:     document.getElementById('wf-dateReq').value,
+            [FLD.mr_lineCount]:   reqItems.length,
+            'fldsS9Q2Z6cuqdkta':  wfKey,   // Submission Key
+          });
+          mainRequestId = newRequest.id;
+        }
         const createdMrlLines = []; // collect { mrlId, matRecId } for SSR population
 
         // Fetch the Request ID formula field (computed by Airtable, not in create response)
@@ -2102,7 +2126,7 @@ let wfFoundRecId = null;
               'fldzjlylKhSe8mWD2': [mainRequestId],
               'fldM7zHq6l40DxJPR': [item.recId],
               'fldkbdMJjKvi2sp8X': item.qty
-            });
+            }, 1); // retries=1: no retry — prevents duplicates
             createdMrlLines.push({ mrlId: lineRecord.id, matRecId: item.recId });
             console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
 
@@ -2565,19 +2589,30 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         if (qty > 0) usedItems.push({ recId: inp.dataset.record, qty });
       });
 
-      // 1. Create the main Daily Materials Used record
+      // 1. Create the main Daily Materials Used record (idempotent)
       const fullJobCode = document.getElementById('dm-jobcode').value.trim();
-      const newUsedRecord = await atCreate(TBL.materialsUsed, {
-        [FLD.mu_company]:   [repRecId],   // Links to Representatives, not Subcontractors
-        [FLD.mu_rep]:       [repRecId],
-        [FLD.mu_email]:     [repRecId],
-        [FLD.mu_mobile]:    [repRecId],
-        [FLD.mu_date]:      document.getElementById('dm-date').value,
-        'Job Code':         fullJobCode,
-        [FLD.mu_lineCount]: usedItems.length,
+      const dmKey = crypto.randomUUID();
+      let mainUsedId;
+      const dmExisting = await atFetchAll(TBL.materialsUsed, {
+        filterByFormula: `{Submission Key}="${dmKey}"`,
+        fields: ['Submission Key'],
       });
-
-      const mainUsedId = newUsedRecord.id;
+      if (dmExisting.length > 0) {
+        mainUsedId = dmExisting[0].id;
+        console.log('DM: existing record found, skipping create:', mainUsedId);
+      } else {
+        const newUsedRecord = await atCreate(TBL.materialsUsed, {
+          [FLD.mu_company]:    [repRecId],
+          [FLD.mu_rep]:        [repRecId],
+          [FLD.mu_email]:      [repRecId],
+          [FLD.mu_mobile]:     [repRecId],
+          [FLD.mu_date]:       document.getElementById('dm-date').value,
+          'Job Code':          fullJobCode,
+          [FLD.mu_lineCount]:  usedItems.length,
+          'fldPlhNRGhoYuh40E': dmKey,   // Submission Key
+        });
+        mainUsedId = newUsedRecord.id;
+      }
 
       // 2. Batch-create MUL line items (up to 10 per API call)
       console.log(`Creating ${usedItems.length} usage line items...`);
@@ -2663,7 +2698,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
             await atCreate(TBL.subcontractorJobReport, {
               'fldOsnJEHcWjfe7fV': [repRecId],
               'fldkCo5VFj09XALYv': [item.lineId],
-            });
+            }, 1); // retries=1: no retry — prevents duplicates on network timeout
             createdSjrMulIds.push(item.lineId);
           } catch(err) { console.warn('SJR create failed:', err.message); }
         }));
@@ -2693,16 +2728,10 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
 
       setTimeout(() => goBack(), 3000);
 
-    } catch(err) { 
-      console.error('Daily Materials Used submission failed:', err);
-      alert(
-        '⚠️ Submission failed after multiple retries.\n\n' +
-        'Error: ' + err.message + '\n\n' +
-        'Please check your internet connection and try again.\n' +
-        'If the problem persists, note down the job details and contact your administrator.'
-      );
+    } catch(err) {
+      alert('Submission failed: ' + err.message); 
+      console.error(err);
       btnReset(btn, 'Submit Daily Record');
-      hidePatience('dm');
     }
 });
 })();
