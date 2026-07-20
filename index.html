@@ -737,14 +737,27 @@ async function atFetchAll(tableId, params = {}) {
   return records;
 }
 
-async function atCreate(tableId, fields) {
-  const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields })
-  });
-  if (!res.ok) throw new Error(`AT create ${res.status}: ${await res.text()}`);
-  return res.json();
+async function atCreate(tableId, fields, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields })
+      });
+      if (res.ok) return res.json();
+      const errText = await res.text();
+      // Don't retry on client errors (4xx) — only on server/network errors
+      if (res.status >= 400 && res.status < 500) throw new Error(`AT create ${res.status}: ${errText}`);
+      if (attempt === retries) throw new Error(`AT create ${res.status}: ${errText}`);
+      console.warn(`atCreate attempt ${attempt} failed (${res.status}) — retrying…`);
+      await new Promise(r => setTimeout(r, 2000 * attempt));
+    } catch(err) {
+      if (attempt === retries || (err.message && err.message.startsWith('AT create 4'))) throw err;
+      console.warn(`atCreate attempt ${attempt} network error — retrying…`, err.message);
+      await new Promise(r => setTimeout(r, 2000 * attempt));
+    }
+  }
 }
 
 // Batch create up to 10 records in one API call
@@ -1166,14 +1179,26 @@ async function atListRecords(tableId, body) {
   return records;
 }
 
-async function atUpdate(tableId, recordId, fields) {
-  const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}/${recordId}`, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields })
-  });
-  if (!res.ok) throw new Error(`AT update ${res.status}: ${await res.text()}`);
-  return res.json();
+async function atUpdate(tableId, recordId, fields, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}/${recordId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields })
+      });
+      if (res.ok) return res.json();
+      const errText = await res.text();
+      if (res.status >= 400 && res.status < 500) throw new Error(`AT update ${res.status}: ${errText}`);
+      if (attempt === retries) throw new Error(`AT update ${res.status}: ${errText}`);
+      console.warn(`atUpdate attempt ${attempt} failed (${res.status}) — retrying…`);
+      await new Promise(r => setTimeout(r, 2000 * attempt));
+    } catch(err) {
+      if (attempt === retries || (err.message && err.message.startsWith('AT update 4'))) throw err;
+      console.warn(`atUpdate attempt ${attempt} network error — retrying…`, err.message);
+      await new Promise(r => setTimeout(r, 2000 * attempt));
+    }
+  }
 }
 
 async function atSearchByFormula(tableId, formula) {
@@ -2669,9 +2694,15 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       setTimeout(() => goBack(), 3000);
 
     } catch(err) { 
-      alert('Submission failed: ' + err.message); 
-      console.error(err);
+      console.error('Daily Materials Used submission failed:', err);
+      alert(
+        '⚠️ Submission failed after multiple retries.\n\n' +
+        'Error: ' + err.message + '\n\n' +
+        'Please check your internet connection and try again.\n' +
+        'If the problem persists, note down the job details and contact your administrator.'
+      );
       btnReset(btn, 'Submit Daily Record');
+      hidePatience('dm');
     }
 });
 })();
