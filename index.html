@@ -1803,7 +1803,7 @@ function goBack() {
       const stateVal = stateEl.value;
       setTimeout(() => sendWSRBatchToPA(locRecId, locationName, stateVal), 15000);
 
-                  showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Returning to home screen…`);
+                  showSuccess('inv-success', `✔ Inventory received submitted. ${lineItems.length} item(s) updated. Please refresh this page to return to the home screen.`);
       this.reset();
       document.getElementById('inv-date').value = todayStr();
       buildStateDropdown(stateEl);
@@ -1811,7 +1811,6 @@ function goBack() {
       mgrEl.value = '';
       document.getElementById('inv-subsections').innerHTML = '';
       notice.style.display = 'block';
-      setTimeout(() => goBack(), 3000);
     } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit'); }
   });
 })();
@@ -2065,7 +2064,7 @@ let wfFoundRecId = null;
           sendWSRBatchToPA(locRecId, locName, stateName);
         }, 8000);
 
-      showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Returning to home screen…`);
+      showSuccess('wf-success', `✔ Receipt confirmed for ${reqIDStr}. Stock adjusted for ${rcvItems.length} item(s). Please refresh this page to return to the home screen.`);
       } else {
         // === NEW MATERIALS REQUEST ===
         const reqItems = [];
@@ -2292,7 +2291,7 @@ let wfFoundRecId = null;
           sendWSRBatchToPA(locRecId, wfLocName, stateName);
         }, 8000);
 
-        showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items). Returning to home screen…`);
+        showSuccess('wf-success', `✔ Materials request submitted successfully (${reqItems.length} items). Please refresh this page to return to the home screen.`);
       }
 
       // Reset
@@ -2308,7 +2307,6 @@ let wfFoundRecId = null;
       notice.style.display = 'block';
       btn.textContent = 'Submit Request';
       wfUnlockFields();
-      setTimeout(() => goBack(), 3000);
     } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, wfMode === 'receive' ? 'Submit Receipt Confirmation' : 'Submit Request'); }
   });
 })();
@@ -2714,7 +2712,7 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
         sendSJRBatchToPA(repRecId, createdSjrMulIds);
       }, 20000);
 
-            showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
+            showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Please refresh this page to return to the home screen.`);
       
       // Reset form
       this.reset();
@@ -2726,7 +2724,6 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       document.getElementById('dm-subsections').innerHTML = '';
       notice.style.display = 'block';
 
-      setTimeout(() => goBack(), 3000);
 
     } catch(err) {
       alert('Submission failed: ' + err.message); 
@@ -3134,7 +3131,7 @@ function buildOpticommDropdown(sel, selectedState) {
         sendWSRBatchToPA(whLocRecId, locationName, crState);
       }, 8000);
 
-            showSuccess('cr-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned. Returning to home screen…`);
+            showSuccess('cr-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned. Please refresh this page to return to the home screen.`);
       this.reset();
       document.getElementById('cr-date').value = todayStr();
       buildCompanyDropdown(crCompEl);
@@ -3143,7 +3140,6 @@ function buildOpticommDropdown(sel, selectedState) {
       buildLocationDropdown(crWhLocEl, '');
       document.getElementById('cr-subsections').innerHTML = '';
       crNotice.style.display = 'block';
-      setTimeout(() => goBack(), 3000);
     } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); }
   });
 })();
@@ -3360,7 +3356,7 @@ async function loadRepInventoryForReturn(repRecId, repName) {
         sendWSRBatchToPA(whLocRecId, orLocName, orState);
       }, 8000);
 
-            showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to Opticomm. Returning to home screen…`);
+            showSuccess('or-success', `✔ Stock return submitted. ${returnItems.length} item(s) returned to Opticomm. Please refresh this page to return to the home screen.`);
       this.reset();
       document.getElementById('or-date').value = todayStr();
       buildStateDropdown(orWhStateEl);
@@ -3368,7 +3364,6 @@ async function loadRepInventoryForReturn(repRecId, repName) {
       buildOpticommDropdown(orOpticommEl, '');
       document.getElementById('or-subsections').innerHTML = '';
       orNotice.style.display = 'block';
-      setTimeout(() => goBack(), 3000);
     } catch(err) { alert('Submission failed: ' + err.message); console.error(err); btnReset(btn, 'Submit Return'); }
   });
 })();
