@@ -1752,20 +1752,14 @@ function goBack() {
       });
 
       const irlBatch = [];
-      const mqPromises = [];
+      const mqUpdates = [];
 
       for (const item of lineItems) {
         const matCacheRec = CACHE.materials.find(r => r.id === item.recId);
         const binId       = matCacheRec?.fields?.['Bin ID'] || '';
 
         // Queue MQ update — runs after IRL so WSR rollup is accurate first
-        mqPromises.push(
-          atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: item.stock + item.qty })
-            .then(() => {
-              const cached = CACHE.materials.find(r => r.id === item.recId);
-              if (cached) cached.fields[item.field] = item.stock + item.qty;
-            })
-        );
+        mqUpdates.push(item);
 
         let wsrRecordId = wsrByBinId[binId] || null;
         if (!wsrRecordId) {
@@ -1790,13 +1784,25 @@ function goBack() {
       }
 
       // Create IRL records FIRST — WSR rollup (Total Stock Received) depends on these
+      // Chunked in groups of 10 records per request, 4 requests at a time to avoid rate limits
       const irlChunks = [];
       for (let i = 0; i < irlBatch.length; i += 10) irlChunks.push(irlBatch.slice(i, i + 10));
-      await Promise.all(irlChunks.map(chunk => atCreateBatch(TBL.inventoryReceivedLines, chunk)));
+      for (let i = 0; i < irlChunks.length; i += 4) {
+        await Promise.all(irlChunks.slice(i, i + 4).map(chunk => atCreateBatch(TBL.inventoryReceivedLines, chunk)));
+      }
       console.log(`✅ Inventory: ${irlBatch.length} IRL line(s) created`);
 
-      // Then update Materials Quantities in parallel
-      await Promise.all(mqPromises);
+      // Then update Materials Quantities — chunked in groups of 4 to avoid rate limits
+      for (let i = 0; i < mqUpdates.length; i += 4) {
+        await Promise.all(mqUpdates.slice(i, i + 4).map(item =>
+          atUpdate(TBL.materialsQuantities, item.recId, { [item.field]: item.stock + item.qty })
+            .then(() => {
+              const cached = CACHE.materials.find(r => r.id === item.recId);
+              if (cached) cached.fields[item.field] = item.stock + item.qty;
+            })
+            .catch(e => console.warn('MQ update failed:', e.message))
+        ));
+      }
       console.log(`✅ Materials Quantities updated`);
 
       // Send WSR batch to Excel after delay for rollups to settle (fire and forget)
@@ -2027,32 +2033,36 @@ let wfFoundRecId = null;
             }
           });
 
-          const ssrCollPromises = Object.entries(mrlByMat2).map(async ([matRecId, mrlIds]) => {
-            let ssrId;
-            if (ssrByMat2[matRecId]) {
-              const existingColl = (ssrByMat2[matRecId].fields['fldcyWPxRAxlykWqE'] || [])
-                .map(r => r && r.id ? r.id : r);
-              const combined = [...new Set([...existingColl, ...mrlIds])];
-              await atUpdate(TBL.subcontractorStockReport, ssrByMat2[matRecId].id, {
-                'fldcyWPxRAxlykWqE': combined,
-              });
-              ssrId = ssrByMat2[matRecId].id;
-            } else {
-              const newSsr2 = await atCreate(TBL.subcontractorStockReport, {
-                'fldV1yEmErUzd4oFw': [repRecId],
-                'fldXm5gW03QOzBE1P': [matRecId],
-                'fldcyWPxRAxlykWqE': mrlIds,
-              });
-              ssrId = newSsr2.id;
-            }
-            // Back-link MRL → SSR (Subcontractor Stock Report field on MRL)
-            await Promise.all(mrlIds.map(mrlId =>
-              atUpdate(TBL.materialsRequestLines, mrlId, {
-                'fldTQcyZ9Uj6HCHUD': [ssrId], // Subcontractor Stock Report
-              }).catch(e => console.warn('MRL SSR back-link failed:', e.message))
-            ));
-          });
-          await Promise.all(ssrCollPromises);
+          const mrlByMat2Entries = Object.entries(mrlByMat2);
+          for (let i = 0; i < mrlByMat2Entries.length; i += 4) {
+            await Promise.all(mrlByMat2Entries.slice(i, i + 4).map(async ([matRecId, mrlIds]) => {
+              let ssrId;
+              if (ssrByMat2[matRecId]) {
+                const existingColl = (ssrByMat2[matRecId].fields['fldcyWPxRAxlykWqE'] || [])
+                  .map(r => r && r.id ? r.id : r);
+                const combined = [...new Set([...existingColl, ...mrlIds])];
+                await atUpdate(TBL.subcontractorStockReport, ssrByMat2[matRecId].id, {
+                  'fldcyWPxRAxlykWqE': combined,
+                });
+                ssrId = ssrByMat2[matRecId].id;
+              } else {
+                const newSsr2 = await atCreate(TBL.subcontractorStockReport, {
+                  'fldV1yEmErUzd4oFw': [repRecId],
+                  'fldXm5gW03QOzBE1P': [matRecId],
+                  'fldcyWPxRAxlykWqE': mrlIds,
+                });
+                ssrId = newSsr2.id;
+              }
+              // Back-link MRL → SSR (Subcontractor Stock Report field on MRL) — chunked in groups of 4
+              for (let j = 0; j < mrlIds.length; j += 4) {
+                await Promise.all(mrlIds.slice(j, j + 4).map(mrlId =>
+                  atUpdate(TBL.materialsRequestLines, mrlId, {
+                    'fldTQcyZ9Uj6HCHUD': [ssrId], // Subcontractor Stock Report
+                  }).catch(e => console.warn('MRL SSR back-link failed:', e.message))
+                ));
+              }
+            }));
+          }
           console.log(`✅ SSR (Collected) populated for ${Object.keys(mrlByMat2).length} material(s)`);
         } catch(ssrCollErr) {
           console.warn('SSR stock collected population failed:', ssrCollErr.message);
@@ -2233,32 +2243,36 @@ let wfFoundRecId = null;
 
           // For each material: update existing SSR row or create new one
           // Then back-link SSR → MRL (Subcontractor Stock Report 2 on MRL)
-          const ssrPromises = Object.entries(mrlByMat).map(async ([matRecId, mrlIds]) => {
-            let ssrId;
-            if (ssrByMat[matRecId]) {
-              const existingReq = (ssrByMat[matRecId].fields['fld9sxRu0sjgTIX5y'] || [])
-                .map(r => r && r.id ? r.id : r);
-              const combined = [...new Set([...existingReq, ...mrlIds])];
-              await atUpdate(TBL.subcontractorStockReport, ssrByMat[matRecId].id, {
-                'fld9sxRu0sjgTIX5y': combined,
-              });
-              ssrId = ssrByMat[matRecId].id;
-            } else {
-              const newSsr = await atCreate(TBL.subcontractorStockReport, {
-                'fldV1yEmErUzd4oFw': [repRecId],   // Representative
-                'fldXm5gW03QOzBE1P': [matRecId],   // Material
-                'fld9sxRu0sjgTIX5y': mrlIds,        // Materials Request Lines (Requested)
-              });
-              ssrId = newSsr.id;
-            }
-            // Back-link each MRL to the SSR row (Subcontractor Stock Report 2)
-            await Promise.all(mrlIds.map(mrlId =>
-              atUpdate(TBL.materialsRequestLines, mrlId, {
-                'fldyjWShEvsFhUt6L': [ssrId], // Subcontractor Stock Report 2
-              }).catch(e => console.warn('MRL SSR2 back-link failed:', e.message))
-            ));
-          });
-          await Promise.all(ssrPromises);
+          const mrlByMatEntries = Object.entries(mrlByMat);
+          for (let i = 0; i < mrlByMatEntries.length; i += 4) {
+            await Promise.all(mrlByMatEntries.slice(i, i + 4).map(async ([matRecId, mrlIds]) => {
+              let ssrId;
+              if (ssrByMat[matRecId]) {
+                const existingReq = (ssrByMat[matRecId].fields['fld9sxRu0sjgTIX5y'] || [])
+                  .map(r => r && r.id ? r.id : r);
+                const combined = [...new Set([...existingReq, ...mrlIds])];
+                await atUpdate(TBL.subcontractorStockReport, ssrByMat[matRecId].id, {
+                  'fld9sxRu0sjgTIX5y': combined,
+                });
+                ssrId = ssrByMat[matRecId].id;
+              } else {
+                const newSsr = await atCreate(TBL.subcontractorStockReport, {
+                  'fldV1yEmErUzd4oFw': [repRecId],   // Representative
+                  'fldXm5gW03QOzBE1P': [matRecId],   // Material
+                  'fld9sxRu0sjgTIX5y': mrlIds,        // Materials Request Lines (Requested)
+                });
+                ssrId = newSsr.id;
+              }
+              // Back-link each MRL to the SSR row (Subcontractor Stock Report 2) — chunked in groups of 4
+              for (let j = 0; j < mrlIds.length; j += 4) {
+                await Promise.all(mrlIds.slice(j, j + 4).map(mrlId =>
+                  atUpdate(TBL.materialsRequestLines, mrlId, {
+                    'fldyjWShEvsFhUt6L': [ssrId], // Subcontractor Stock Report 2
+                  }).catch(e => console.warn('MRL SSR2 back-link failed:', e.message))
+                ));
+              }
+            }));
+          }
           console.log(`✅ SSR (Requested) populated for ${Object.keys(mrlByMat).length} material(s)`);
         } catch(ssrErr) {
           console.warn('SSR new request population failed:', ssrErr.message);
