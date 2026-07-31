@@ -138,10 +138,22 @@
   .patience-notice .pn-text { display:flex; flex-direction:column; gap:.2rem; text-align:left; max-width:480px; }
   .patience-notice .pn-text span { font-weight:400; font-size:.88rem; }
 
+  /* Offline submission queue badge */
+  #offline-queue-badge { display:none; position:fixed; top:14px; right:14px; z-index:9999; align-items:center; gap:.5rem; background:#7a4f00; color:#fff3cd; padding:.5rem .9rem; border-radius:2rem; font-size:.85rem; font-weight:600; box-shadow:0 2px 10px rgba(0,0,0,.25); cursor:pointer; }
+  #offline-queue-badge .oq-dot { width:8px; height:8px; border-radius:50%; background:#ffc107; animation:oq-pulse 1.4s ease-in-out infinite; }
+  @keyframes oq-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  #offline-queue-badge.oq-offline { background:#7a1f1f; color:#ffe0e0; }
+  #offline-queue-badge.oq-offline .oq-dot { background:#ff5c5c; }
+  @media(max-width:600px){ #offline-queue-badge { top:auto; bottom:14px; right:14px; left:14px; justify-content:center; } }
+
 </style>
   <link rel="icon" href="favicon.png" type="image/png">
 </head>
 <body>
+<div id="offline-queue-badge" onclick="window.__mmpProcessQueue && window.__mmpProcessQueue()">
+  <span class="oq-dot"></span>
+  <span class="oq-count">0</span>&nbsp;submission(s) waiting to sync — tap to retry
+</div>
 <header>
   <img src="Field Register Header.png" alt="Field Register Logo" class="header-logo" />
 </header>
@@ -854,7 +866,7 @@ async function sendWSRBatchToPA(locRecId, locationName, stateVal) {
 
 // Fetch SSR rows for a rep and send as one batch to Power Automate
 async function sendSSRBatchToPA(repRecId) {
-  if (!PA_SSR_WEBHOOK) { console.warn('PA_SSR_WEBHOOK not configured'); return; }
+  if (!PA_SSR_WEBHOOK) { console.warn('PA_SSR_WEBHOOK not configured'); return false; }
   try {
     console.log(`sendSSRBatchToPA: fetching SSR for rep ${repRecId}`);
     const resp = await fetch(
@@ -886,7 +898,7 @@ async function sendSSRBatchToPA(repRecId) {
     const data = await resp.json();
     const rows = data.records || [];
     console.log(`sendSSRBatchToPA: ${rows.length} SSR rows found`);
-    if (!rows.length) return;
+    if (!rows.length) return true; // nothing to send counts as success
 
     function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
     const payload = rows.map(row => {
@@ -908,22 +920,27 @@ async function sendSSRBatchToPA(repRecId) {
       };
     });
 
-    // Fire and forget
-    fetch(PA_SSR_WEBHOOK, {
+    const pushResp = await fetch(PA_SSR_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ records: payload }),
-    }).then(r => console.log(`✅ SSR batch sent to PA: ${payload.length} record(s), status ${r.status}`))
-      .catch(err => console.warn('SSR PA batch failed:', err.message));
+    });
+    if (pushResp.ok || pushResp.status === 202) {
+      console.log(`✅ SSR batch sent to PA: ${payload.length} record(s), status ${pushResp.status}`);
+      return true;
+    }
+    console.warn(`SSR PA batch failed with status ${pushResp.status}`);
+    return false;
 
   } catch(err) {
     console.warn('sendSSRBatchToPA error:', err.message);
+    return false;
   }
 }
 
 // Fetch SJR rows for a rep and send as one batch to Power Automate
 async function sendSJRBatchToPA(repRecId, mulIds) {
-  if (!PA_SJR_WEBHOOK) { console.warn('PA_SJR_WEBHOOK not configured'); return; }
+  if (!PA_SJR_WEBHOOK) { console.warn('PA_SJR_WEBHOOK not configured'); return false; }
   try {
     const mulIdSet = new Set(mulIds || []);
     console.log(`sendSJRBatchToPA: fetching all SJR records, matching ${mulIdSet.size} MUL IDs client-side`);
@@ -969,7 +986,7 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
       : allSjrRows;
 
     console.log(`sendSJRBatchToPA: ${allSjrRows.length} total SJR rows, ${rows.length} matched`);
-    if (!rows.length) return;
+    if (!rows.length) return true;
 
     function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
     const payload = rows.map(row => {
@@ -1015,7 +1032,8 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
       }
     }
     if (!sjrSent) console.warn('SJR batch failed after 3 attempts — check Power Automate flow status');
-  } catch(err) { console.warn('sendSJRBatchToPA error:', err.message); }
+    return sjrSent;
+  } catch(err) { console.warn('sendSJRBatchToPA error:', err.message); return false; }
 }
 
 // Fetch CSR rows for a rep and send as one batch to Power Automate
@@ -1204,6 +1222,150 @@ async function atUpdate(tableId, recordId, fields, retries = 3) {
 async function atSearchByFormula(tableId, formula) {
   return atFetchAll(tableId, { filterByFormula: formula });
 }
+
+// ═══════════════════════════════════════════════════
+//  OFFLINE QUEUE — IndexedDB-backed submission queue
+//  Any submission that fails to reach Airtable because
+//  of lost reception is saved locally and auto-retried
+//  once connectivity returns, so no field data is lost.
+// ═══════════════════════════════════════════════════
+const QUEUE_DB_NAME = 'mmp_offline_queue';
+const QUEUE_STORE    = 'submissions';
+let queueDbPromise = null;
+
+function openQueueDB() {
+  if (queueDbPromise) return queueDbPromise;
+  queueDbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(QUEUE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(QUEUE_STORE)) {
+        const store = db.createObjectStore(QUEUE_STORE, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('status', 'status');
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+  return queueDbPromise;
+}
+
+async function queueAdd(formType, payload, label) {
+  const db = await openQueueDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(QUEUE_STORE, 'readwrite');
+    const req = tx.objectStore(QUEUE_STORE).add({
+      formType, payload, label,
+      status: 'pending',
+      attempts: 0,
+      createdAt: new Date().toISOString(),
+      lastError: null,
+    });
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function queueGetAll() {
+  const db = await openQueueDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(QUEUE_STORE, 'readonly').objectStore(QUEUE_STORE).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+async function queueDelete(id) {
+  const db = await openQueueDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(QUEUE_STORE, 'readwrite');
+    tx.objectStore(QUEUE_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+
+async function queueUpdate(id, changes) {
+  const db = await openQueueDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(QUEUE_STORE, 'readwrite');
+    const store = tx.objectStore(QUEUE_STORE);
+    const getReq = store.get(id);
+    getReq.onsuccess = () => {
+      const rec = getReq.result;
+      if (!rec) return resolve(null);
+      Object.assign(rec, changes);
+      const putReq = store.put(rec);
+      putReq.onsuccess = () => resolve(rec);
+      putReq.onerror   = () => reject(putReq.error);
+    };
+    getReq.onerror = () => reject(getReq.error);
+  });
+}
+
+// One replay function per form type — registered further down near each form's handler.
+// A replayer takes the exact payload that was queued and re-runs the real Airtable
+// submission logic against it, with no DOM access (the person may be on a different
+// screen or the page may have reloaded by the time this runs).
+const QUEUE_REPLAYERS = {};
+function registerQueueReplayer(formType, fn) { QUEUE_REPLAYERS[formType] = fn; }
+
+// Treat anything that isn't a clean HTTP response from Airtable/Power Automate as a
+// connectivity problem worth queuing, rather than a "real" validation/data error.
+function isNetworkError(err) {
+  if (!navigator.onLine) return true;
+  const msg = (err && err.message) || '';
+  return err instanceof TypeError ||
+         /failed to fetch|networkerror|load failed|network request failed/i.test(msg);
+}
+
+let queueProcessing = false;
+async function processQueue() {
+  if (queueProcessing || !navigator.onLine) return;
+  queueProcessing = true;
+  try {
+    const items = (await queueGetAll()).filter(r => r.status === 'pending');
+    for (const item of items) {
+      const replay = QUEUE_REPLAYERS[item.formType];
+      if (!replay) continue;
+      try {
+        await replay(item.payload);
+        await queueDelete(item.id);
+        console.log(`✅ Queued submission synced: ${item.label || item.formType} (#${item.id})`);
+      } catch (err) {
+        await queueUpdate(item.id, { attempts: (item.attempts || 0) + 1, lastError: err.message });
+        console.warn(`Queued submission retry failed: ${item.label || item.formType} (#${item.id}):`, err.message);
+      }
+    }
+  } finally {
+    queueProcessing = false;
+    updateQueueBadge();
+  }
+}
+
+async function updateQueueBadge() {
+  const badge = document.getElementById('offline-queue-badge');
+  if (!badge) return;
+  const items = await queueGetAll().catch(() => []);
+  const pending = items.filter(r => r.status === 'pending').length;
+  badge.classList.toggle('oq-offline', !navigator.onLine);
+  if (pending > 0) {
+    badge.style.display = 'flex';
+    badge.querySelector('.oq-count').textContent = pending;
+  } else if (navigator.onLine) {
+    badge.style.display = 'none';
+  } else {
+    // Show an offline indicator even with an empty queue, so field staff know why.
+    badge.style.display = 'flex';
+    badge.querySelector('.oq-count').textContent = '0';
+  }
+}
+
+window.__mmpProcessQueue = () => processQueue().then(updateQueueBadge);
+window.addEventListener('online',  () => { console.log('🌐 Back online — syncing queued submissions'); updateQueueBadge(); processQueue(); });
+window.addEventListener('offline', () => { console.log('📴 Offline — new submissions will be queued locally'); updateQueueBadge(); });
+setInterval(() => { if (navigator.onLine) processQueue(); }, 30000); // periodic retry safety net
+document.addEventListener('DOMContentLoaded', () => { updateQueueBadge(); if (navigator.onLine) processQueue(); });
 
 // ═══════════════════════════════════════════════════
 //  INIT: Load all reference data once
@@ -2577,7 +2739,188 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
     }
   });
 
-document.getElementById('formDaily').addEventListener('submit', async function(e) {
+  // Pure submission logic — no DOM access, so it can be re-run later from the
+  // offline queue exactly as it would have run live. dmKey is generated once at
+  // submit time and carried in the payload, so a retry after a partial failure
+  // finds the existing record via Submission Key instead of duplicating it.
+  async function submitDailyMaterialUsed(payload) {
+    const { repRecId, usedItems, fullJobCode, dmDate, dmKey } = payload;
+
+    // 1. Create the main Daily Materials Used record (idempotent)
+    let mainUsedId;
+    let existingMulLineIds = [];
+    const dmExisting = await atFetchAll(TBL.materialsUsed, {
+      filterByFormula: `{Submission Key}="${dmKey}"`,
+      fields: ['Submission Key', 'Materials Used Lines'],
+    });
+    if (dmExisting.length > 0) {
+      mainUsedId = dmExisting[0].id;
+      existingMulLineIds = (dmExisting[0].fields['Materials Used Lines'] || []).map(r => r && r.id ? r.id : r);
+      console.log('DM: existing record found, skipping create:', mainUsedId);
+    } else {
+      const newUsedRecord = await atCreate(TBL.materialsUsed, {
+        [FLD.mu_company]:    [repRecId],
+        [FLD.mu_rep]:        [repRecId],
+        [FLD.mu_email]:      [repRecId],
+        [FLD.mu_mobile]:     [repRecId],
+        [FLD.mu_date]:       dmDate,
+        'Job Code':          fullJobCode,
+        [FLD.mu_lineCount]:  usedItems.length,
+        'fldPlhNRGhoYuh40E': dmKey,   // Submission Key
+      });
+      mainUsedId = newUsedRecord.id;
+    }
+
+    // 2. Batch-create MUL line items (up to 10 per API call) — skip any that
+    //    already exist for this Submission Key, in case a prior attempt partly succeeded.
+    console.log(`Creating ${usedItems.length} usage line items...`);
+    let createdUsedLineIds = [];
+    let remainingItems = usedItems;
+    if (existingMulLineIds.length > 0) {
+      const idFormula = 'OR(' + existingMulLineIds.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
+      const existingMulRows = await atFetchAll(TBL.materialsUsedLines, {
+        filterByFormula: idFormula,
+        fields: ['Material'],
+      }).catch(() => []);
+      const alreadyCreatedMatIds = new Set(
+        existingMulRows.map(r => (r.fields['Material'] || [])[0]).filter(Boolean)
+      );
+      createdUsedLineIds = existingMulRows.map(r => ({
+        lineId: r.id, recId: (r.fields['Material'] || [])[0],
+      }));
+      remainingItems = usedItems.filter(item => !alreadyCreatedMatIds.has(item.recId));
+    }
+    const mulBatchFields = remainingItems.map(item => ({
+      'fldbEHOSuv028hMjD': [mainUsedId],
+      'fld0u8aUHdRsSIJLm': [item.recId],
+      'fldGV26CqV55FYGv6': item.qty,
+      'flduIFkorq5wVuNNz': dmDate,
+    }));
+    for (let i = 0; i < mulBatchFields.length; i += 10) {
+      const chunk = mulBatchFields.slice(i, i + 10);
+      const created = await atCreateBatch(TBL.materialsUsedLines, chunk);
+      created.forEach((rec, idx) => {
+        createdUsedLineIds.push({ lineId: rec.id, recId: remainingItems[i + idx].recId });
+        console.log(`✅ MUL created: ${rec.id}`);
+      });
+    }
+
+    // 3+4. Fetch SSR once, group MUL lines by SSR row, then update/create SSR + SJR all in parallel
+    const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
+      fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
+      returnFieldsByFieldId: true,
+    });
+
+    // Group MUL lines by SSR row — one atUpdate per SSR row, not per MUL line
+    const ssrUpdates = {};   // ssrId → { existingIds[], newLineIds[] }
+    const ssrCreates = [];   // { matRecId, lineIds[] }
+
+    createdUsedLineIds.forEach(item => {
+      const ssrMatch = allSsrRows.find(row => {
+        const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
+        const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
+        return repLookup.includes(repRecId) && matLinked.includes(item.recId);
+      });
+      if (ssrMatch) {
+        if (!ssrUpdates[ssrMatch.id]) {
+          ssrUpdates[ssrMatch.id] = {
+            existingIds: (ssrMatch.fields['fldozoAjUrm312vj9'] || []).map(r => r && r.id ? r.id : r),
+            newLineIds: [],
+          };
+        }
+        if (!ssrUpdates[ssrMatch.id].existingIds.includes(item.lineId) &&
+            !ssrUpdates[ssrMatch.id].newLineIds.includes(item.lineId)) {
+          ssrUpdates[ssrMatch.id].newLineIds.push(item.lineId);
+        }
+      } else {
+        const existing = ssrCreates.find(c => c.matRecId === item.recId);
+        if (existing) {
+          existing.lineIds.push(item.lineId);
+        } else {
+          ssrCreates.push({ matRecId: item.recId, lineIds: [item.lineId] });
+        }
+      }
+    });
+
+    // Fire all SSR updates, SSR creates, and SJR creates in parallel
+    // SSR updates — chunked in groups of 4 to avoid rate limits
+    const ssrUpdateEntries = Object.entries(ssrUpdates);
+    for (let i = 0; i < ssrUpdateEntries.length; i += 4) {
+      await Promise.all(ssrUpdateEntries.slice(i, i + 4).map(([ssrId, { existingIds, newLineIds }]) =>
+        atUpdate(TBL.subcontractorStockReport, ssrId, {
+          'fldozoAjUrm312vj9': [...existingIds, ...newLineIds],
+        }).catch(err => console.warn('SSR update failed:', err.message))
+      ));
+    }
+    // SSR creates — chunked in groups of 4
+    for (let i = 0; i < ssrCreates.length; i += 4) {
+      await Promise.all(ssrCreates.slice(i, i + 4).map(({ matRecId, lineIds }) =>
+        atCreate(TBL.subcontractorStockReport, {
+          'fldV1yEmErUzd4oFw': [repRecId],
+          'fldXm5gW03QOzBE1P': [matRecId],
+          'fldozoAjUrm312vj9': lineIds,
+        }).catch(err => console.warn('SSR create failed:', err.message))
+      ));
+    }
+    // SJR creates — skip any MUL lines that already have an SJR record (retry-safety,
+    // matters when a prior attempt got this far before losing reception), chunked in groups of 4.
+    const existingSjrRows = await atListRecords(TBL.subcontractorJobReport, {
+      fields: ['fldkCo5VFj09XALYv'], // Materials Used Line
+      returnFieldsByFieldId: true,
+    }).catch(() => []);
+    const mulIdsWithSjr = new Set();
+    existingSjrRows.forEach(row => {
+      (row.fields['fldkCo5VFj09XALYv'] || []).forEach(r => mulIdsWithSjr.add(r && r.id ? r.id : r));
+    });
+    const createdSjrMulIds = createdUsedLineIds.filter(item => mulIdsWithSjr.has(item.lineId)).map(item => item.lineId);
+    const sjrPendingItems = createdUsedLineIds.filter(item => !mulIdsWithSjr.has(item.lineId));
+    for (let i = 0; i < sjrPendingItems.length; i += 4) {
+      await Promise.all(sjrPendingItems.slice(i, i + 4).map(async item => {
+        try {
+          await atCreate(TBL.subcontractorJobReport, {
+            'fldOsnJEHcWjfe7fV': [repRecId],
+            'fldkCo5VFj09XALYv': [item.lineId],
+          }, 1); // retries=1: no retry — prevents duplicates on network timeout
+          createdSjrMulIds.push(item.lineId);
+        } catch(err) { console.warn('SJR create failed:', err.message); }
+      }));
+    }
+    console.log(`✅ SSR: ${ssrUpdateEntries.length} updated, ${ssrCreates.length} created. SJR: ${createdSjrMulIds.length} total (${sjrPendingItems.length} newly created).`);
+
+    // Send SSR + SJR batches to Excel — 20s delay to let SJR records propagate.
+    // Not awaited here, so the submission itself still returns quickly — but the
+    // Excel push is wrapped in its own try/catch so a failure (including reception
+    // dropping again during the wait) gets queued for automatic retry instead of
+    // being silently lost, the way a bare fire-and-forget setTimeout would lose it.
+    (async () => {
+      await new Promise(r => setTimeout(r, 20000));
+      try {
+        const ssrOk = await sendSSRBatchToPA(repRecId);
+        const sjrOk = await sendSJRBatchToPA(repRecId, createdSjrMulIds);
+        if (!ssrOk || !sjrOk) throw new Error('Excel sync returned a failure status');
+      } catch (webhookErr) {
+        console.warn('Excel sync failed after Daily Material Used submission — queuing for retry:', webhookErr.message);
+        try {
+          await queueAdd('dailyMaterialUsedWebhookRetry', { repRecId, createdSjrMulIds }, `Daily Material Used — Excel sync retry (${fullJobCode})`);
+          updateQueueBadge();
+        } catch (qErr) {
+          console.error('Could not queue Excel sync retry either — this one is genuinely lost:', qErr.message);
+        }
+      }
+    })();
+  }
+  registerQueueReplayer('dailyMaterialUsed', submitDailyMaterialUsed);
+
+  // Retry-only path for when Airtable writes already succeeded but the Excel
+  // push itself failed (e.g. reception dropped during the 20s settle delay).
+  registerQueueReplayer('dailyMaterialUsedWebhookRetry', async (payload) => {
+    const { repRecId, createdSjrMulIds } = payload;
+    const ssrOk = await sendSSRBatchToPA(repRecId);
+    const sjrOk = await sendSJRBatchToPA(repRecId, createdSjrMulIds);
+    if (!ssrOk || !sjrOk) throw new Error('Excel sync retry failed');
+  });
+
+  document.getElementById('formDaily').addEventListener('submit', async function(e) {
     e.preventDefault();
     let ok = true;
     if (!validateSel('dm-company', 'dmgrp-company')) ok = false;
@@ -2593,143 +2936,21 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
     const btn = document.getElementById('dm-submitBtn');
     btnLoading(btn);
 
+    const repRecId  = document.getElementById('dm-rep').value;
+    const usedItems = [];
+    document.querySelectorAll('.dm-used').forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      if (qty > 0) usedItems.push({ recId: inp.dataset.record, qty });
+    });
+    const fullJobCode = document.getElementById('dm-jobcode').value.trim();
+    const dmDate = document.getElementById('dm-date').value;
+    const dmKey = crypto.randomUUID(); // generated once — carried through to any retry
+    const payload = { repRecId, usedItems, fullJobCode, dmDate, dmKey };
+
     try {
-      const repRecId  = document.getElementById('dm-rep').value;
-      const compRecId = document.getElementById('dm-company').value;
+      await submitDailyMaterialUsed(payload);
+      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
 
-      const usedItems = [];
-      document.querySelectorAll('.dm-used').forEach(inp => {
-        const qty = parseInt(inp.value) || 0;
-        if (qty > 0) usedItems.push({ recId: inp.dataset.record, qty });
-      });
-
-      // 1. Create the main Daily Materials Used record (idempotent)
-      const fullJobCode = document.getElementById('dm-jobcode').value.trim();
-      const dmKey = crypto.randomUUID();
-      let mainUsedId;
-      const dmExisting = await atFetchAll(TBL.materialsUsed, {
-        filterByFormula: `{Submission Key}="${dmKey}"`,
-        fields: ['Submission Key'],
-      });
-      if (dmExisting.length > 0) {
-        mainUsedId = dmExisting[0].id;
-        console.log('DM: existing record found, skipping create:', mainUsedId);
-      } else {
-        const newUsedRecord = await atCreate(TBL.materialsUsed, {
-          [FLD.mu_company]:    [repRecId],
-          [FLD.mu_rep]:        [repRecId],
-          [FLD.mu_email]:      [repRecId],
-          [FLD.mu_mobile]:     [repRecId],
-          [FLD.mu_date]:       document.getElementById('dm-date').value,
-          'Job Code':          fullJobCode,
-          [FLD.mu_lineCount]:  usedItems.length,
-          'fldPlhNRGhoYuh40E': dmKey,   // Submission Key
-        });
-        mainUsedId = newUsedRecord.id;
-      }
-
-      // 2. Batch-create MUL line items (up to 10 per API call)
-      console.log(`Creating ${usedItems.length} usage line items...`);
-      const dmDate = document.getElementById('dm-date').value;
-      const mulBatchFields = usedItems.map(item => ({
-        'fldbEHOSuv028hMjD': [mainUsedId],
-        'fld0u8aUHdRsSIJLm': [item.recId],
-        'fldGV26CqV55FYGv6': item.qty,
-        'flduIFkorq5wVuNNz': dmDate,
-      }));
-      const createdUsedLineIds = [];
-      for (let i = 0; i < mulBatchFields.length; i += 10) {
-        const chunk = mulBatchFields.slice(i, i + 10);
-        const created = await atCreateBatch(TBL.materialsUsedLines, chunk);
-        created.forEach((rec, idx) => {
-          createdUsedLineIds.push({ lineId: rec.id, recId: usedItems[i + idx].recId });
-          console.log(`✅ MUL created: ${rec.id}`);
-        });
-      }
-
-      // 3+4. Fetch SSR once, group MUL lines by SSR row, then update/create SSR + SJR all in parallel
-      const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
-        fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
-        returnFieldsByFieldId: true,
-      });
-
-      // Group MUL lines by SSR row — one atUpdate per SSR row, not per MUL line
-      const ssrUpdates = {};   // ssrId → { existingIds[], newLineIds[] }
-      const ssrCreates = [];   // { matRecId, lineIds[] }
-
-      createdUsedLineIds.forEach(item => {
-        const ssrMatch = allSsrRows.find(row => {
-          const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
-          const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
-          return repLookup.includes(repRecId) && matLinked.includes(item.recId);
-        });
-        if (ssrMatch) {
-          if (!ssrUpdates[ssrMatch.id]) {
-            ssrUpdates[ssrMatch.id] = {
-              existingIds: (ssrMatch.fields['fldozoAjUrm312vj9'] || []).map(r => r && r.id ? r.id : r),
-              newLineIds: [],
-            };
-          }
-          if (!ssrUpdates[ssrMatch.id].existingIds.includes(item.lineId) &&
-              !ssrUpdates[ssrMatch.id].newLineIds.includes(item.lineId)) {
-            ssrUpdates[ssrMatch.id].newLineIds.push(item.lineId);
-          }
-        } else {
-          const existing = ssrCreates.find(c => c.matRecId === item.recId);
-          if (existing) {
-            existing.lineIds.push(item.lineId);
-          } else {
-            ssrCreates.push({ matRecId: item.recId, lineIds: [item.lineId] });
-          }
-        }
-      });
-
-      // Fire all SSR updates, SSR creates, and SJR creates in parallel
-      // SSR updates — chunked in groups of 4 to avoid rate limits
-      const ssrUpdateEntries = Object.entries(ssrUpdates);
-      for (let i = 0; i < ssrUpdateEntries.length; i += 4) {
-        await Promise.all(ssrUpdateEntries.slice(i, i + 4).map(([ssrId, { existingIds, newLineIds }]) =>
-          atUpdate(TBL.subcontractorStockReport, ssrId, {
-            'fldozoAjUrm312vj9': [...existingIds, ...newLineIds],
-          }).catch(err => console.warn('SSR update failed:', err.message))
-        ));
-      }
-      // SSR creates — chunked in groups of 4
-      for (let i = 0; i < ssrCreates.length; i += 4) {
-        await Promise.all(ssrCreates.slice(i, i + 4).map(({ matRecId, lineIds }) =>
-          atCreate(TBL.subcontractorStockReport, {
-            'fldV1yEmErUzd4oFw': [repRecId],
-            'fldXm5gW03QOzBE1P': [matRecId],
-            'fldozoAjUrm312vj9': lineIds,
-          }).catch(err => console.warn('SSR create failed:', err.message))
-        ));
-      }
-      // SJR creates — chunked in groups of 4, track successful MUL IDs for PA batch
-      const createdSjrMulIds = [];
-      for (let i = 0; i < createdUsedLineIds.length; i += 4) {
-        await Promise.all(createdUsedLineIds.slice(i, i + 4).map(async item => {
-          try {
-            await atCreate(TBL.subcontractorJobReport, {
-              'fldOsnJEHcWjfe7fV': [repRecId],
-              'fldkCo5VFj09XALYv': [item.lineId],
-            }, 1); // retries=1: no retry — prevents duplicates on network timeout
-            createdSjrMulIds.push(item.lineId);
-          } catch(err) { console.warn('SJR create failed:', err.message); }
-        }));
-      }
-      console.log(`✅ SSR: ${ssrUpdateEntries.length} updated, ${ssrCreates.length} created. SJR: ${createdSjrMulIds.length} created.`);
-
-            // Send SSR batch to Excel after delay for rollups to settle
-      // Send SSR + SJR batches to Excel after delay for rollups to settle
-      // Collect MUL line IDs for SJR filter
-      // Send SSR + SJR batches to Excel — 20s delay to let SJR records propagate
-      setTimeout(() => {
-        sendSSRBatchToPA(repRecId);
-        sendSJRBatchToPA(repRecId, createdSjrMulIds);
-      }, 20000);
-
-            showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
-      
       // Reset form
       this.reset();
       document.getElementById('dm-date').value = todayStr();
@@ -2742,9 +2963,30 @@ document.getElementById('formDaily').addEventListener('submit', async function(e
       setTimeout(() => goBack(), 3000);
 
     } catch(err) {
-      alert('Submission failed: ' + err.message); 
-      console.error(err);
-      btnReset(btn, 'Submit Daily Record');
+      if (isNetworkError(err)) {
+        try {
+          await queueAdd('dailyMaterialUsed', payload, `Daily Material Used — ${usedItems.length} item(s) — ${fullJobCode}`);
+          updateQueueBadge();
+          showSuccess('dm-success', `📴 No connection — saved offline. ${usedItems.length} item(s) will sync automatically once reception returns.`);
+          this.reset();
+          document.getElementById('dm-date').value = todayStr();
+          document.getElementById('dm-jobcode').value = '';
+          document.getElementById('dm-jobcode-suffix').value = '';
+          buildCompanyDropdown(compEl);
+          buildRepDropdown(repEl, '', emailEl, mobileEl);
+          document.getElementById('dm-subsections').innerHTML = '';
+          notice.style.display = 'block';
+          setTimeout(() => goBack(), 3000);
+        } catch(queueErr) {
+          alert('Submission failed and could not be saved offline: ' + queueErr.message);
+          console.error(queueErr);
+          btnReset(btn, 'Submit Daily Record');
+        }
+      } else {
+        alert('Submission failed: ' + err.message);
+        console.error(err);
+        btnReset(btn, 'Submit Daily Record');
+      }
     }
 });
 })();
