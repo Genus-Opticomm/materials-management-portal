@@ -148,6 +148,8 @@
 
 </style>
   <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#7a4f00">
 </head>
 <body>
 <div id="offline-queue-badge" onclick="window.__mmpProcessQueue && window.__mmpProcessQueue()">
@@ -1366,6 +1368,37 @@ window.addEventListener('online',  () => { console.log('🌐 Back online — syn
 window.addEventListener('offline', () => { console.log('📴 Offline — new submissions will be queued locally'); updateQueueBadge(); });
 setInterval(() => { if (navigator.onLine) processQueue(); }, 30000); // periodic retry safety net
 document.addEventListener('DOMContentLoaded', () => { updateQueueBadge(); if (navigator.onLine) processQueue(); });
+
+// Foreground fallback — covers iOS (Safari and Chrome-on-iOS are both WebKit
+// and don't support Background Sync), plus acts as an instant-retry for any
+// browser the moment the app is reopened/foregrounded, rather than waiting
+// on the 30s timer above.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && navigator.onLine) processQueue(); });
+window.addEventListener('pageshow', () => { if (navigator.onLine) processQueue(); });
+
+// Service worker registration — enables true Background Sync on Android/Chrome
+// and desktop Chrome/Edge, so a queued submission can sync even if the tab or
+// app was fully closed while offline. Has no effect on iOS (Safari/Chrome-on-iOS
+// don't implement Background Sync), which relies on the foreground fallback above.
+let __mmpSwRegistration = null;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js')
+    .then(reg => { __mmpSwRegistration = reg; console.log('✅ Service worker registered'); })
+    .catch(err => console.warn('Service worker registration failed:', err.message));
+}
+
+async function requestBackgroundSync() {
+  if (!__mmpSwRegistration || !('sync' in ServiceWorkerRegistration.prototype)) {
+    // Not supported here (e.g. iOS) — the foreground fallback above covers it instead.
+    return;
+  }
+  try {
+    await __mmpSwRegistration.sync.register('sync-offline-queue');
+  } catch (err) {
+    console.warn('Background sync registration failed:', err.message);
+  }
+}
+
 
 // ═══════════════════════════════════════════════════
 //  INIT: Load all reference data once
@@ -2903,6 +2936,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
         try {
           await queueAdd('dailyMaterialUsedWebhookRetry', { repRecId, createdSjrMulIds }, `Daily Material Used — Excel sync retry (${fullJobCode})`);
           updateQueueBadge();
+          requestBackgroundSync();
         } catch (qErr) {
           console.error('Could not queue Excel sync retry either — this one is genuinely lost:', qErr.message);
         }
@@ -2967,6 +3001,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
         try {
           await queueAdd('dailyMaterialUsed', payload, `Daily Material Used — ${usedItems.length} item(s) — ${fullJobCode}`);
           updateQueueBadge();
+          requestBackgroundSync();
           showSuccess('dm-success', `📴 No connection — saved offline. ${usedItems.length} item(s) will sync automatically once reception returns.`);
           this.reset();
           document.getElementById('dm-date').value = todayStr();
