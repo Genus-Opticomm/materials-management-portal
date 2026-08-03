@@ -3376,59 +3376,82 @@ function buildOpticommDropdown(sel, selectedState) {
       const whCacheRec = CACHE.warehouseByRecId[whLocRecId];
       const locationName = whCacheRec?.fields?.['Location'] || '';
 
-      for (const item of returnItems) {
-        // Find or create WSR row for the destination warehouse + material
-        let wsrRecordId = null;
-        try {
+      // Fetch all WSR rows for this location ONCE instead of once per line item.
+      // Safe to resolve in parallel below — Bin ID is unique per material, so no
+      // two items in a submission can ever target the same WSR row.
+      const wsrRowsForLocation = await atFetchAll(TBL.warehouseStockReport, {
+        filterByFormula: `FIND("${locationName}",ARRAYJOIN({Warehouse Location}))`,
+        fields: ['Report Key', 'Bin ID'],
+      }).catch(() => []);
+      const wsrByBinId = {};
+      wsrRowsForLocation.forEach(row => {
+        const binId = (row.fields['Bin ID'] || [])[0] || row.fields['Bin ID'] || '';
+        if (binId) wsrByBinId[binId] = row;
+      });
+
+      // Fallback SSR lookup — only needed for items whose SSR id wasn't already
+      // known from the inventory table (dataset.ssr). Fetched once for the rep
+      // via filterByFormula instead of scanning the entire table per item.
+      let ssrByMatId = null;
+      if (returnItems.some(item => !item.ssrRecId)) {
+        const ssrRows = await atFetchAll(TBL.subcontractorStockReport, {
+          filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`,
+          fields: ['fldXm5gW03QOzBE1P'],
+          returnFieldsByFieldId: true,
+        }).catch(() => []);
+        ssrByMatId = {};
+        ssrRows.forEach(row => {
+          const matIds = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
+          matIds.forEach(id => { ssrByMatId[id] = row.id; });
+        });
+      }
+
+      // Resolve WSR (get-or-create) + SSR ids for every item — chunked in groups
+      // of 4, safe in parallel since each item targets a distinct WSR row.
+      const resolvedItems = [];
+      for (let i = 0; i < returnItems.length; i += 4) {
+        const chunkResults = await Promise.all(returnItems.slice(i, i + 4).map(async item => {
           const matCacheRec = CACHE.materials.find(r => r.id === item.recId);
           const binId = matCacheRec?.fields?.['Bin ID'] || '';
-          const wsrRows = await atFetchAll(TBL.warehouseStockReport, {
-            filterByFormula: `AND(FIND("${locationName}",ARRAYJOIN({Warehouse Location})),FIND("${binId}",ARRAYJOIN({Bin ID})))`,
-            fields: ['Report Key'],
-          });
-          if (wsrRows.length > 0) {
-            wsrRecordId = wsrRows[0].id;
-          } else {
-            const newWsr = await atCreate(TBL.warehouseStockReport, {
-              [FLD.wsr_warehouse]: [whLocRecId],
-              [FLD.wsr_material]:  [item.recId],
-            });
-            wsrRecordId = newWsr.id;
-          }
-        } catch(wsrErr) { console.warn('WSR find/create failed:', wsrErr.message); }
-
-        // Find SSR record for this rep + material
-        let ssrRecordId = item.ssrRecId || null;
-        if (!ssrRecordId) {
+          let wsrRecordId = null;
           try {
-            const allSsr = await atListRecords(TBL.subcontractorStockReport, {
-              fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P'],
-              returnFieldsByFieldId: true,
-            });
-            const ssrMatch = allSsr.find(row => {
-              const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
-              const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
-              return repLookup.includes(repRecId) && matLinked.includes(item.recId);
-            });
-            if (ssrMatch) ssrRecordId = ssrMatch.id;
-          } catch(ssrErr) { console.warn('SSR lookup failed:', ssrErr.message); }
-        }
+            const existingWsr = wsrByBinId[binId];
+            if (existingWsr) {
+              wsrRecordId = existingWsr.id;
+            } else {
+              const newWsr = await atCreate(TBL.warehouseStockReport, {
+                [FLD.wsr_warehouse]: [whLocRecId],
+                [FLD.wsr_material]:  [item.recId],
+              });
+              wsrRecordId = newWsr.id;
+              wsrByBinId[binId] = newWsr;
+            }
+          } catch(wsrErr) { console.warn('WSR find/create failed:', wsrErr.message); }
 
-        // Create Contractor Stock Return record
-        const csrFields = {
+          const ssrRecordId = item.ssrRecId || (ssrByMatId ? ssrByMatId[item.recId] : null) || null;
+          return { item, wsrRecordId, ssrRecordId };
+        }));
+        resolvedItems.push(...chunkResults);
+      }
+
+      // Batch-create CSR records (up to 10 per API call)
+      const csrBatchFields = resolvedItems.map(({ item, wsrRecordId, ssrRecordId }) => {
+        const f = {
           [FLD.csr_representative]: [repRecId],
           [FLD.csr_material]:       [item.recId],
           [FLD.csr_warehouse]:      [whLocRecId],
           [FLD.csr_qtyReturned]:    item.qty,
           [FLD.csr_dateReturned]:   dateVal,
         };
-        csrFields[FLD.csr_notes] = notesVal;
-        if (wsrRecordId) csrFields[FLD.csr_wsr]   = [wsrRecordId];
-        if (ssrRecordId) csrFields[FLD.csr_ssr]   = [ssrRecordId];
-
-        await atCreate(TBL.contractorReturns, csrFields);
-        console.log(`✅ Contractor return: mat ${item.recId}, qty ${item.qty} → ${locationName}`);
+        f[FLD.csr_notes] = notesVal;
+        if (wsrRecordId) f[FLD.csr_wsr] = [wsrRecordId];
+        if (ssrRecordId) f[FLD.csr_ssr] = [ssrRecordId];
+        return f;
+      });
+      for (let i = 0; i < csrBatchFields.length; i += 10) {
+        await atCreateBatch(TBL.contractorReturns, csrBatchFields.slice(i, i + 10));
       }
+      console.log(`✅ Contractor return: ${returnItems.length} item(s) submitted → ${locationName}`);
 
       // Send CSR + SSR + WSR batches to Excel after delay for rollups to settle
       const crState = whCacheRec?.fields?.['State'] || '';
@@ -3458,15 +3481,12 @@ async function loadRepInventoryForReturn(repRecId, repName) {
   container.innerHTML = '<div class="table-loading">⏳ Loading on-hand inventory for ' + repName + '...</div>';
 
   try {
-    // Fetch all SSR rows for this rep
-    const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
-      fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldpr4nM1K7MkLdEI'],
+    // Fetch SSR rows for this rep directly via filterByFormula, instead of
+    // fetching the entire table and filtering client-side
+    const repSsrRows = await atFetchAll(TBL.subcontractorStockReport, {
+      filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`,
+      fields: ['fldXm5gW03QOzBE1P', 'fldpr4nM1K7MkLdEI'],
       returnFieldsByFieldId: true,
-    });
-
-    const repSsrRows = allSsrRows.filter(row => {
-      const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
-      return repLookup.includes(repRecId);
     });
 
     // Build map: materialRecId → { onhand, ssrRecId }
