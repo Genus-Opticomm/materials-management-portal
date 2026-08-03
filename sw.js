@@ -25,6 +25,8 @@ const TBL = {
   materialsUsedLines:       'tblxktgCxv6few93n',
   subcontractorStockReport: 'tblAkiFxWxDYV2Alm',
   subcontractorJobReport:   'tbl5pCmx7a4tpNCNk',
+  representatives:          'tblutA51et1wwkEVA',
+  materials:                'tbldLNJHOmXy6MdRa', // Materials Quantities table
 };
 
 const FLD = {
@@ -159,52 +161,10 @@ async function sendSSRBatchToPA(repRecId) {
   }
 }
 
-async function sendSJRBatchToPA(repRecId, mulIds) {
+async function sendSJRBatchToPA(payload) {
   if (!PA_SJR_WEBHOOK) return false;
+  if (!payload || !payload.length) return true;
   try {
-    const mulIdSet = new Set(mulIds || []);
-    let allSjrRows = [];
-    let offset = null;
-    do {
-      const body = {
-        fields: [
-          'fldXkqr0dATTrcdzV', 'fldb7YZ77x7vA0ASQ', 'fldLRS9CRtPP0AvKd', 'flddKwtwsYspIqPy0',
-          'fldAoLaJ2fPHr9Kax', 'fldvOMUgG8eY0uzWg', 'fld1zKoTmFi7w7CLV', 'fld6Qsb3feNVsTsU7',
-          'fldMuQy4naImR0Qyf', 'fldWqgEITuvz4ZmWI', 'fldfPyfyxPtbIKMoz', 'fld9f0dxJZqSaUJp5',
-          'fldkCo5VFj09XALYv',
-        ],
-        returnFieldsByFieldId: true, pageSize: 100,
-      };
-      if (offset) body.offset = offset;
-      const resp = await fetch(`${AT_API}/${AT_BASE}/${TBL.subcontractorJobReport}/listRecords`, {
-        method: 'POST', headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      });
-      const data = await resp.json();
-      allSjrRows = allSjrRows.concat(data.records || []);
-      offset = data.offset || null;
-    } while (offset);
-
-    const rows = mulIdSet.size
-      ? allSjrRows.filter(row => {
-          const linked = (row.fields['fldkCo5VFj09XALYv'] || []).map(l => l && l.id ? l.id : l);
-          return linked.some(id => mulIdSet.has(id));
-        })
-      : allSjrRows;
-    if (!rows.length) return true;
-
-    const u = v => Array.isArray(v) ? v[0] || '' : v || '';
-    const payload = rows.map(row => {
-      const f = row.fields;
-      return {
-        reportKey: u(f['fldXkqr0dATTrcdzV']), dateInstalled: u(f['fldb7YZ77x7vA0ASQ']),
-        jobCode: u(f['fldLRS9CRtPP0AvKd']), companyName: u(f['flddKwtwsYspIqPy0']),
-        fullName: u(f['fldAoLaJ2fPHr9Kax']), email: u(f['fldvOMUgG8eY0uzWg']),
-        mobile: u(f['fld1zKoTmFi7w7CLV']), inventoryCode: u(f['fld6Qsb3feNVsTsU7']),
-        opCode: u(f['fldMuQy4naImR0Qyf']), itCode: u(f['fldWqgEITuvz4ZmWI']),
-        description: u(f['fldfPyfyxPtbIKMoz']), qtyUsed: Number(u(f['fld9f0dxJZqSaUJp5'])) || 0,
-      };
-    });
-
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const sjrRes = await fetch(PA_SJR_WEBHOOK, {
@@ -252,9 +212,9 @@ async function submitDailyMaterialUsed(payload) {
   let remainingItems = usedItems;
   if (existingMulLineIds.length > 0) {
     const idFormula = 'OR(' + existingMulLineIds.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
-    const existingMulRows = await atFetchAll(TBL.materialsUsedLines, { filterByFormula: idFormula, fields: ['Material'] }).catch(() => []);
+    const existingMulRows = await atFetchAll(TBL.materialsUsedLines, { filterByFormula: idFormula, fields: ['Material', 'Qty Used'] }).catch(() => []);
     const alreadyCreatedMatIds = new Set(existingMulRows.map(r => (r.fields['Material'] || [])[0]).filter(Boolean));
-    createdUsedLineIds = existingMulRows.map(r => ({ lineId: r.id, recId: (r.fields['Material'] || [])[0] }));
+    createdUsedLineIds = existingMulRows.map(r => ({ lineId: r.id, recId: (r.fields['Material'] || [])[0], qty: r.fields['Qty Used'] || 0 }));
     remainingItems = usedItems.filter(item => !alreadyCreatedMatIds.has(item.recId));
   }
   const mulBatchFields = remainingItems.map(item => ({
@@ -263,7 +223,7 @@ async function submitDailyMaterialUsed(payload) {
   }));
   for (let i = 0; i < mulBatchFields.length; i += 10) {
     const created = await atCreateBatch(TBL.materialsUsedLines, mulBatchFields.slice(i, i + 10));
-    created.forEach((rec, idx) => createdUsedLineIds.push({ lineId: rec.id, recId: remainingItems[i + idx].recId }));
+    created.forEach((rec, idx) => createdUsedLineIds.push({ lineId: rec.id, recId: remainingItems[i + idx].recId, qty: remainingItems[i + idx].qty }));
   }
 
   const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
@@ -307,21 +267,66 @@ async function submitDailyMaterialUsed(payload) {
   const existingSjrRows = await atListRecords(TBL.subcontractorJobReport, { fields: ['fldkCo5VFj09XALYv'], returnFieldsByFieldId: true }).catch(() => []);
   const mulIdsWithSjr = new Set();
   existingSjrRows.forEach(row => (row.fields['fldkCo5VFj09XALYv'] || []).forEach(r => mulIdsWithSjr.add(r && r.id ? r.id : r)));
-  const createdSjrMulIds = createdUsedLineIds.filter(item => mulIdsWithSjr.has(item.lineId)).map(item => item.lineId);
   const sjrPendingItems = createdUsedLineIds.filter(item => !mulIdsWithSjr.has(item.lineId));
   for (let i = 0; i < sjrPendingItems.length; i += 4) {
     await Promise.all(sjrPendingItems.slice(i, i + 4).map(async item => {
       try {
         await atCreate(TBL.subcontractorJobReport, { 'fldOsnJEHcWjfe7fV': [repRecId], 'fldkCo5VFj09XALYv': [item.lineId] }, 1);
-        createdSjrMulIds.push(item.lineId);
       } catch (err) { console.warn('[sw] SJR create failed:', err.message); }
     }));
   }
 
+  // Build the SJR Excel payload from two small targeted lookups (rep + the
+  // handful of materials involved) instead of the old full-table SJR fetch.
+  // No shared CACHE here (this runs in the service worker's own context), so
+  // this is as cheap as it gets without one — a couple of scoped API calls
+  // instead of paginating through the entire SJR table like before.
+  const repRows = await atFetchAll(TBL.representatives, {
+    filterByFormula: `RECORD_ID()="${repRecId}"`,
+    fields: ['Full Name', 'Company Name (from Company)', 'Email', 'Mobile'],
+  }).catch(() => []);
+  const repRow = repRows[0];
+  const cn = repRow?.fields?.['Company Name (from Company)'];
+  const sjrCompanyName = (Array.isArray(cn) ? cn[0] : cn) || '';
+  const sjrFullName = repRow?.fields?.['Full Name'] || '';
+  const sjrEmail    = repRow?.fields?.['Email'] || '';
+  const sjrMobile   = repRow?.fields?.['Mobile'] || '';
+
+  const uniqueMatIds = [...new Set(createdUsedLineIds.map(item => item.recId))];
+  let matRows = [];
+  if (uniqueMatIds.length) {
+    const matFormula = 'OR(' + uniqueMatIds.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
+    matRows = await atFetchAll(TBL.materials, {
+      filterByFormula: matFormula,
+      fields: ['Inventory Code', 'OP Code', 'IT Code', 'Description'],
+    }).catch(() => []);
+  }
+  const matById = {};
+  matRows.forEach(r => { matById[r.id] = r.fields; });
+
+  const sjrExcelPayload = createdUsedLineIds.map(item => {
+    const mf = matById[item.recId] || {};
+    const inventoryCode = mf['Inventory Code'] || '';
+    return {
+      reportKey:     `${sjrCompanyName} - ${sjrFullName} | ${inventoryCode} | ${fullJobCode}`,
+      dateInstalled: dmDate,
+      jobCode:       fullJobCode,
+      companyName:   sjrCompanyName,
+      fullName:      sjrFullName,
+      email:         sjrEmail,
+      mobile:        sjrMobile,
+      inventoryCode,
+      opCode:        mf['OP Code'] || '',
+      itCode:        mf['IT Code'] || '',
+      description:   mf['Description'] || '',
+      qtyUsed:       item.qty || 0,
+    };
+  });
+
   // No 20s artificial wait here — by the time a background sync event fires,
   // enough real time has already passed for rollups to have settled.
   const ssrOk = await sendSSRBatchToPA(repRecId);
-  const sjrOk = await sendSJRBatchToPA(repRecId, createdSjrMulIds);
+  const sjrOk = await sendSJRBatchToPA(sjrExcelPayload);
   if (!ssrOk || !sjrOk) {
     // Leave a lightweight retry-only record behind for next sync event
     throw new Error('Excel sync failed during background replay');
@@ -329,9 +334,9 @@ async function submitDailyMaterialUsed(payload) {
 }
 
 async function replayWebhookRetry(payload) {
-  const { repRecId, createdSjrMulIds } = payload;
+  const { repRecId, sjrExcelPayload } = payload;
   const ssrOk = await sendSSRBatchToPA(repRecId);
-  const sjrOk = await sendSJRBatchToPA(repRecId, createdSjrMulIds);
+  const sjrOk = await sendSJRBatchToPA(sjrExcelPayload);
   if (!ssrOk || !sjrOk) throw new Error('Excel sync retry failed');
 }
 

@@ -941,76 +941,11 @@ async function sendSSRBatchToPA(repRecId) {
 }
 
 // Fetch SJR rows for a rep and send as one batch to Power Automate
-async function sendSJRBatchToPA(repRecId, mulIds) {
+async function sendSJRBatchToPA(payload) {
   if (!PA_SJR_WEBHOOK) { console.warn('PA_SJR_WEBHOOK not configured'); return false; }
+  if (!payload || !payload.length) return true;
   try {
-    const mulIdSet = new Set(mulIds || []);
-    console.log(`sendSJRBatchToPA: fetching all SJR records, matching ${mulIdSet.size} MUL IDs client-side`);
-    let allSjrRows = [];
-    let offset = null;
-    do {
-      const body = {
-        fields: [
-          'fldXkqr0dATTrcdzV', // Report Key
-          'fldb7YZ77x7vA0ASQ', // Date Installed
-          'fldLRS9CRtPP0AvKd', // Job Code
-          'flddKwtwsYspIqPy0', // Company Name
-          'fldAoLaJ2fPHr9Kax', // Full Name
-          'fldvOMUgG8eY0uzWg', // Email
-          'fld1zKoTmFi7w7CLV', // Mobile
-          'fld6Qsb3feNVsTsU7', // Inventory Code
-          'fldMuQy4naImR0Qyf', // OP Code
-          'fldWqgEITuvz4ZmWI', // IT Code
-          'fldfPyfyxPtbIKMoz', // Description
-          'fld9f0dxJZqSaUJp5', // Qty Used
-          'fldkCo5VFj09XALYv', // Materials Used Line (for client-side match)
-        ],
-        returnFieldsByFieldId: true,
-        pageSize: 100,
-      };
-      if (offset) body.offset = offset;
-      const resp = await fetch(
-        `${AT_API}/${AT_BASE}/${TBL.subcontractorJobReport}/listRecords`,
-        { method: 'POST', headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-      );
-      const data = await resp.json();
-      allSjrRows = allSjrRows.concat(data.records || []);
-      offset = data.offset || null;
-    } while (offset);
-
-    // Filter client-side by MUL IDs
-    const rows = mulIdSet.size
-      ? allSjrRows.filter(row => {
-          const linked = (row.fields['fldkCo5VFj09XALYv'] || []);
-          const linkedIds = linked.map(l => l && l.id ? l.id : l);
-          return linkedIds.some(id => mulIdSet.has(id));
-        })
-      : allSjrRows;
-
-    console.log(`sendSJRBatchToPA: ${allSjrRows.length} total SJR rows, ${rows.length} matched`);
-    if (!rows.length) return true;
-
-    function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
-    const payload = rows.map(row => {
-      const f = row.fields;
-      return {
-        reportKey:    u(f['fldXkqr0dATTrcdzV']),
-        dateInstalled:u(f['fldb7YZ77x7vA0ASQ']),
-        jobCode:      u(f['fldLRS9CRtPP0AvKd']),
-        companyName:  u(f['flddKwtwsYspIqPy0']),
-        fullName:     u(f['fldAoLaJ2fPHr9Kax']),
-        email:        u(f['fldvOMUgG8eY0uzWg']),
-        mobile:       u(f['fld1zKoTmFi7w7CLV']),
-        inventoryCode:u(f['fld6Qsb3feNVsTsU7']),
-        opCode:       u(f['fldMuQy4naImR0Qyf']),
-        itCode:       u(f['fldWqgEITuvz4ZmWI']),
-        description:  u(f['fldfPyfyxPtbIKMoz']),
-        qtyUsed:      Number(u(f['fld9f0dxJZqSaUJp5'])) || 0,
-      };
-    });
-
     // Retry up to 3 times on 502/503 (transient Power Automate infrastructure errors)
-    let sjrSent = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const sjrRes = await fetch(PA_SJR_WEBHOOK, {
@@ -1019,22 +954,22 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
         });
         if (sjrRes.ok || sjrRes.status === 202) {
           console.log(`✅ SJR batch sent: ${payload.length} record(s), status ${sjrRes.status}`);
-          sjrSent = true;
-          break;
+          return true;
         } else if (sjrRes.status === 502 || sjrRes.status === 503) {
           console.warn(`SJR attempt ${attempt} got ${sjrRes.status} — retrying in 5s…`);
           await new Promise(r => setTimeout(r, 5000));
         } else {
           console.warn(`SJR batch failed with status ${sjrRes.status}`);
-          break;
+          return false;
         }
       } catch(fetchErr) {
         console.warn(`SJR attempt ${attempt} error:`, fetchErr.message);
+        if (attempt === 3) return false;
         await new Promise(r => setTimeout(r, 5000));
       }
     }
-    if (!sjrSent) console.warn('SJR batch failed after 3 attempts — check Power Automate flow status');
-    return sjrSent;
+    console.warn('SJR batch failed after 3 attempts — check Power Automate flow status');
+    return false;
   } catch(err) { console.warn('sendSJRBatchToPA error:', err.message); return false; }
 }
 
@@ -1042,13 +977,15 @@ async function sendSJRBatchToPA(repRecId, mulIds) {
 async function sendCSRBatchToPA(repRecId) {
   if (!PA_CSR_WEBHOOK) { console.warn('PA_CSR_WEBHOOK not configured'); return; }
   try {
-    // Fetch all CSR rows and filter client-side by rep — linked record FIND unreliable
-    console.log(`sendCSRBatchToPA: fetching all CSR rows, filtering by rep ${repRecId} client-side`);
-    let allCsrRows = [];
-    let offset = null;
-    do {
-      const body = {
-        fields: [
+    console.log(`sendCSRBatchToPA: fetching CSR for rep ${repRecId}`);
+    const resp = await fetch(
+      `${AT_API}/${AT_BASE}/${TBL.contractorReturns}/listRecords`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`,
+          fields: [
           'fldqI3bmSJZHkWisC', // Return Key
           'fldbXwagNxvCXyvu5', // Full Name (from Representative)
           'fldTfAfgtWmDNp3Rj', // Company (from Representative)
@@ -1063,24 +1000,17 @@ async function sendCSRBatchToPA(repRecId) {
           'fldiQGRJSEQdJ0QLI', // Notes
         ],
         returnFieldsByFieldId: true,
-        pageSize: 100,
-      };
-      if (offset) body.offset = offset;
-      const resp = await fetch(
-        `${AT_API}/${AT_BASE}/${TBL.contractorReturns}/listRecords`,
-        { method: 'POST', headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-      );
-      const data = await resp.json();
-      if (data.error) { console.warn('CSR fetch error:', JSON.stringify(data.error)); break; }
-      allCsrRows = allCsrRows.concat(data.records || []);
-      offset = data.offset || null;
-    } while (offset);
-
-    console.log(`sendCSRBatchToPA: ${allCsrRows.length} total CSR rows fetched`);
-    if (!allCsrRows.length) return;
+        })
+      }
+    );
+    const data = await resp.json();
+    if (data.error) { console.warn('CSR fetch error:', JSON.stringify(data.error)); return; }
+    const csrRows = data.records || [];
+    console.log(`sendCSRBatchToPA: ${csrRows.length} CSR rows found for rep ${repRecId}`);
+    if (!csrRows.length) return;
 
     function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
-    const payload = allCsrRows.map(row => {
+    const payload = csrRows.map(row => {
       const f = row.fields;
       const compId = u(f['fldTfAfgtWmDNp3Rj']);
       const compRec = CACHE.subcontractors?.find(r => r.id === compId);
@@ -1115,44 +1045,39 @@ async function sendCSRBatchToPA(repRecId) {
 async function sendOSRBatchToPA(whLocRecId) {
   if (!PA_OSR_WEBHOOK) { console.warn('PA_OSR_WEBHOOK not configured'); return; }
   try {
-    // Fetch all OSR rows — linked record FIND unreliable, send full table to PA
-    console.log(`sendOSRBatchToPA: fetching all OSR rows`);
-    let allOsrRows = [];
-    let offset = null;
-    do {
-      const body = {
-        fields: [
-          'flddeVm1RTm3W5A6v', // Return Key
-          'fldkjvu5Q0sEXrUWk', // State (from Warehouse)
-          'fldYQ6cd15ZYrXFBf', // Location (from Warehouse)
-          'fldM6HxsQxete5toC', // Location (from Opticomm Warehouse)
-          'fldEh9ZCgOE4rpERq', // Inventory Code (from Material)
-          'fldQvBHJpV0DwI7HD', // OP Code (from Material)
-          'fldZFAs1x0R8IHTAe', // IT Code (from Material)
-          'fldy9qIs4jM0XWWgX', // Description (from Material)
-          'fldkyrtQMlDqJ1ibP', // Qty Returned
-          'fldPNWRGXLdFoqbvk', // Date Returned
-          'fldq8NrgtZxci3ubm', // Notes
-        ],
-        returnFieldsByFieldId: true,
-        pageSize: 100,
-      };
-      if (offset) body.offset = offset;
-      const resp = await fetch(
-        `${AT_API}/${AT_BASE}/${TBL.opticommReturns}/listRecords`,
-        { method: 'POST', headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-      );
-      const data = await resp.json();
-      if (data.error) { console.warn('OSR fetch error:', JSON.stringify(data.error)); break; }
-      allOsrRows = allOsrRows.concat(data.records || []);
-      offset = data.offset || null;
-    } while (offset);
-
-    console.log(`sendOSRBatchToPA: ${allOsrRows.length} total OSR rows fetched`);
-    if (!allOsrRows.length) return;
+    console.log(`sendOSRBatchToPA: fetching OSR for warehouse ${whLocRecId}`);
+    const resp = await fetch(
+      `${AT_API}/${AT_BASE}/${TBL.opticommReturns}/listRecords`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filterByFormula: `FIND("${whLocRecId}", ARRAYJOIN({Warehouse Record ID (from Warehouse)}))`,
+          fields: [
+            'flddeVm1RTm3W5A6v', // Return Key
+            'fldkjvu5Q0sEXrUWk', // State (from Warehouse)
+            'fldYQ6cd15ZYrXFBf', // Location (from Warehouse)
+            'fldM6HxsQxete5toC', // Location (from Opticomm Warehouse)
+            'fldEh9ZCgOE4rpERq', // Inventory Code (from Material)
+            'fldQvBHJpV0DwI7HD', // OP Code (from Material)
+            'fldZFAs1x0R8IHTAe', // IT Code (from Material)
+            'fldy9qIs4jM0XWWgX', // Description (from Material)
+            'fldkyrtQMlDqJ1ibP', // Qty Returned
+            'fldPNWRGXLdFoqbvk', // Date Returned
+            'fldq8NrgtZxci3ubm', // Notes
+          ],
+          returnFieldsByFieldId: true,
+        })
+      }
+    );
+    const data = await resp.json();
+    if (data.error) { console.warn('OSR fetch error:', JSON.stringify(data.error)); return; }
+    const osrRows = data.records || [];
+    console.log(`sendOSRBatchToPA: ${osrRows.length} OSR rows found for warehouse ${whLocRecId}`);
+    if (!osrRows.length) return;
 
     function u(v) { return Array.isArray(v) ? v[0] || '' : v || ''; }
-    const payload = allOsrRows.map(row => {
+    const payload = osrRows.map(row => {
       const f = row.fields;
       return {
         returnKey:         u(f['flddeVm1RTm3W5A6v']),
@@ -2823,13 +2748,13 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
       const idFormula = 'OR(' + existingMulLineIds.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
       const existingMulRows = await atFetchAll(TBL.materialsUsedLines, {
         filterByFormula: idFormula,
-        fields: ['Material'],
+        fields: ['Material', 'Qty Used'],
       }).catch(() => []);
       const alreadyCreatedMatIds = new Set(
         existingMulRows.map(r => (r.fields['Material'] || [])[0]).filter(Boolean)
       );
       createdUsedLineIds = existingMulRows.map(r => ({
-        lineId: r.id, recId: (r.fields['Material'] || [])[0],
+        lineId: r.id, recId: (r.fields['Material'] || [])[0], qty: r.fields['Qty Used'] || 0,
       }));
       remainingItems = usedItems.filter(item => !alreadyCreatedMatIds.has(item.recId));
     }
@@ -2843,7 +2768,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
       const chunk = mulBatchFields.slice(i, i + 10);
       const created = await atCreateBatch(TBL.materialsUsedLines, chunk);
       created.forEach((rec, idx) => {
-        createdUsedLineIds.push({ lineId: rec.id, recId: remainingItems[i + idx].recId });
+        createdUsedLineIds.push({ lineId: rec.id, recId: remainingItems[i + idx].recId, qty: remainingItems[i + idx].qty });
         console.log(`✅ MUL created: ${rec.id}`);
       });
     }
@@ -2915,7 +2840,6 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
     existingSjrRows.forEach(row => {
       (row.fields['fldkCo5VFj09XALYv'] || []).forEach(r => mulIdsWithSjr.add(r && r.id ? r.id : r));
     });
-    const createdSjrMulIds = createdUsedLineIds.filter(item => mulIdsWithSjr.has(item.lineId)).map(item => item.lineId);
     const sjrPendingItems = createdUsedLineIds.filter(item => !mulIdsWithSjr.has(item.lineId));
     for (let i = 0; i < sjrPendingItems.length; i += 4) {
       await Promise.all(sjrPendingItems.slice(i, i + 4).map(async item => {
@@ -2924,13 +2848,41 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
             'fldOsnJEHcWjfe7fV': [repRecId],
             'fldkCo5VFj09XALYv': [item.lineId],
           }, 1); // retries=1: no retry — prevents duplicates on network timeout
-          createdSjrMulIds.push(item.lineId);
         } catch(err) { console.warn('SJR create failed:', err.message); }
       }));
     }
-    console.log(`✅ SSR: ${ssrUpdateEntries.length} updated, ${ssrCreates.length} created. SJR: ${createdSjrMulIds.length} total (${sjrPendingItems.length} newly created).`);
+    console.log(`✅ SSR: ${ssrUpdateEntries.length} updated, ${ssrCreates.length} created. SJR: ${createdUsedLineIds.length} total (${sjrPendingItems.length} newly created).`);
 
-    // Send SSR + SJR batches to Excel — 20s delay to let SJR records propagate.
+    // Build the SJR Excel payload directly from data already known client-side —
+    // no need to re-fetch the SJR table at all. Report Key format must match the
+    // Airtable formula exactly: {Company Name} - {Full Name} | {Inventory Code} | {Job Code}
+    const sjrRepRec = CACHE.representatives.find(r => r.id === repRecId);
+    const cn = sjrRepRec?.fields?.['Company Name (from Company)'];
+    const sjrCompanyName = (Array.isArray(cn) ? cn[0] : cn) || '';
+    const sjrFullName = sjrRepRec?.fields?.['Full Name'] || '';
+    const sjrEmail    = sjrRepRec?.fields?.['Email'] || '';
+    const sjrMobile   = sjrRepRec?.fields?.['Mobile'] || '';
+
+    const sjrExcelPayload = createdUsedLineIds.map(item => {
+      const mat = CACHE.materials.find(r => r.id === item.recId);
+      const inventoryCode = mat?.fields?.['Inventory Code'] || '';
+      return {
+        reportKey:     `${sjrCompanyName} - ${sjrFullName} | ${inventoryCode} | ${fullJobCode}`,
+        dateInstalled: dmDate,
+        jobCode:       fullJobCode,
+        companyName:   sjrCompanyName,
+        fullName:      sjrFullName,
+        email:         sjrEmail,
+        mobile:        sjrMobile,
+        inventoryCode,
+        opCode:        mat?.fields?.['OP Code'] || '',
+        itCode:        mat?.fields?.['IT Code'] || '',
+        description:   mat?.fields?.['Description'] || '',
+        qtyUsed:       item.qty || 0,
+      };
+    });
+
+    // Send SSR + SJR batches to Excel — 20s delay to let SSR rollups settle.
     // Not awaited here, so the submission itself still returns quickly — but the
     // Excel push is wrapped in its own try/catch so a failure (including reception
     // dropping again during the wait) gets queued for automatic retry instead of
@@ -2939,12 +2891,12 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
       await new Promise(r => setTimeout(r, 20000));
       try {
         const ssrOk = await sendSSRBatchToPA(repRecId);
-        const sjrOk = await sendSJRBatchToPA(repRecId, createdSjrMulIds);
+        const sjrOk = await sendSJRBatchToPA(sjrExcelPayload);
         if (!ssrOk || !sjrOk) throw new Error('Excel sync returned a failure status');
       } catch (webhookErr) {
         console.warn('Excel sync failed after Daily Material Used submission — queuing for retry:', webhookErr.message);
         try {
-          await queueAdd('dailyMaterialUsedWebhookRetry', { repRecId, createdSjrMulIds }, `Daily Material Used — Excel sync retry (${fullJobCode})`);
+          await queueAdd('dailyMaterialUsedWebhookRetry', { repRecId, sjrExcelPayload }, `Daily Material Used — Excel sync retry (${fullJobCode})`);
           updateQueueBadge();
           requestBackgroundSync();
         } catch (qErr) {
@@ -2958,9 +2910,9 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
   // Retry-only path for when Airtable writes already succeeded but the Excel
   // push itself failed (e.g. reception dropped during the 20s settle delay).
   registerQueueReplayer('dailyMaterialUsedWebhookRetry', async (payload) => {
-    const { repRecId, createdSjrMulIds } = payload;
+    const { repRecId, sjrExcelPayload } = payload;
     const ssrOk = await sendSSRBatchToPA(repRecId);
-    const sjrOk = await sendSJRBatchToPA(repRecId, createdSjrMulIds);
+    const sjrOk = await sendSJRBatchToPA(sjrExcelPayload);
     if (!ssrOk || !sjrOk) throw new Error('Excel sync retry failed');
   });
 
