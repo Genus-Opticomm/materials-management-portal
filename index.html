@@ -148,7 +148,7 @@
 
 </style>
   <link rel="icon" href="favicon.png" type="image/png">
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="manifest.json?v=2">
   <meta name="theme-color" content="#7a4f00">
 </head>
 <body>
@@ -2112,12 +2112,14 @@ let wfFoundRecId = null;
         const mainRecs = await atSearchByFormula(TBL.materialsRequest, `RECORD_ID()="${wfFoundRecId}"`);
         const reqIDStr = mainRecs[0]?.fields['Request ID'] || '';
 
-        for (const item of rcvItems) {
-          // Update Qty Received in line items
-          const lineSearch = await atSearchByFormula(TBL.materialsRequestLines, 
-            `{Request ID (from Request)}="${reqIDStr}"`
-          );
+        // Fetch all line items for this request once, instead of re-fetching
+        // inside every loop iteration
+        const lineSearch = await atSearchByFormula(TBL.materialsRequestLines, 
+          `{Request ID (from Request)}="${reqIDStr}"`
+        );
+        const ssreqBatch = [];
 
+        for (const item of rcvItems) {
           // Find the matching line item for this material
           const matchingLine = lineSearch.find(line => 
             line.fields['Material'] && line.fields['Material'][0] === item.recId
@@ -2129,29 +2131,27 @@ let wfFoundRecId = null;
             await atUpdate(TBL.materialsRequestLines, matchingLine.id, lineFields);
             console.log(`Updated Qty Received for material ${item.recId}${wfCancelMode ? ' (Order Cancelled)' : ''}`);
 
-            // Update SSReq_Data via direct webhook
-            try {
-              const rcvMat     = CACHE.materials.find(r => r.id === item.recId);
-              const rcvInvCode = rcvMat?.fields?.['Inventory Code'] || '';
-              const rcvRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
-              const rcvCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
-              const rcvLoc     = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex]?.dataset?.location || '';
-              const rcvReportKey = `${reqIDStr} | ${rcvLoc} | ${rcvRepName} | ${rcvInvCode}`;
-              await triggerSSReqWebhook({
-                lineId:                        matchingLine.id,
-                'Report Key':                  rcvReportKey,
-                'Request ID':                  reqIDStr,
-                'Company Name':                rcvCompany,
-                'Company Representative Name': rcvRepName,
-                'Location':                    rcvLoc,
-                'Date Required':               document.getElementById('wf-dateReq').value,
-                'Date Collected':              document.getElementById('wf-dateColl').value,
-                'Product Description':         rcvMat?.fields?.['Description'] || '',
-                'Qty Requested':               parseInt(matchingLine.fields?.['Qty Requested']) || item.qtyReceived,
-                'Qty Received':                item.qtyReceived,
-                'Order Cancelled':             wfCancelMode ? 'Yes' : 'No',
-              });
-            } catch(ssreqErr) { console.warn('SSReq receipt webhook error:', ssreqErr.message); }
+            // Queue SSReq_Data record — sent as one batch after the loop
+            const rcvMat     = CACHE.materials.find(r => r.id === item.recId);
+            const rcvInvCode = rcvMat?.fields?.['Inventory Code'] || '';
+            const rcvRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
+            const rcvCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
+            const rcvLoc     = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex]?.dataset?.location || '';
+            const rcvReportKey = `${reqIDStr} | ${rcvLoc} | ${rcvRepName} | ${rcvInvCode}`;
+            ssreqBatch.push({
+              lineId:                        matchingLine.id,
+              'Report Key':                  rcvReportKey,
+              'Request ID':                  reqIDStr,
+              'Company Name':                rcvCompany,
+              'Company Representative Name': rcvRepName,
+              'Location':                    rcvLoc,
+              'Date Required':               document.getElementById('wf-dateReq').value,
+              'Date Collected':              document.getElementById('wf-dateColl').value,
+              'Product Description':         rcvMat?.fields?.['Description'] || '',
+              'Qty Requested':               parseInt(matchingLine.fields?.['Qty Requested']) || item.qtyReceived,
+              'Qty Received':                item.qtyReceived,
+              'Order Cancelled':             wfCancelMode ? 'Yes' : 'No',
+            });
           }
 
           // Stock adjustment: Return (Requested - Received) back to warehouse
@@ -2170,6 +2170,11 @@ let wfFoundRecId = null;
 
           matRec.fields[stockField] = newStock;
         }
+
+        // Send all SSReq_Data updates for this receipt confirmation as one batch
+        try {
+          await triggerSSReqWebhookBatch(ssreqBatch);
+        } catch(ssreqErr) { console.warn('SSReq receipt webhook batch error:', ssreqErr.message); }
 
         // Write Date Collected (and Order Cancelled if in cancel mode) to header
         const dateCollected = document.getElementById('wf-dateColl').value;
@@ -2324,6 +2329,7 @@ let wfFoundRecId = null;
         // Get location name for WSR lookup
         const wfLocOpt2    = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
         const wfLocName    = wfLocOpt2?.dataset?.location || '';
+        const ssreqBatch = [];
 
         for (const item of reqItems) {
           try {
@@ -2335,15 +2341,15 @@ let wfFoundRecId = null;
             createdMrlLines.push({ mrlId: lineRecord.id, matRecId: item.recId });
             console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
 
-            // Fire SSReq webhook immediately using Airtable-generated Request ID
-            try {
-              const mrlMat     = CACHE.materials.find(r => r.id === item.recId);
-              const mrlInvCode = mrlMat?.fields?.['Inventory Code'] || '';
-              const mrlRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
-              const mrlCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
-              const mrlReportKey = `${mrlRequestIdStr} | ${wfLocName} | ${mrlRepName} | ${mrlInvCode}`;
-              await triggerSSReqWebhook({
-                lineId:                        lineRecord.id,
+            // Queue SSReq_Data record — sent as one batch after the loop, using
+            // the Airtable-generated Request ID
+            const mrlMat     = CACHE.materials.find(r => r.id === item.recId);
+            const mrlInvCode = mrlMat?.fields?.['Inventory Code'] || '';
+            const mrlRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
+            const mrlCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
+            const mrlReportKey = `${mrlRequestIdStr} | ${wfLocName} | ${mrlRepName} | ${mrlInvCode}`;
+            ssreqBatch.push({
+              lineId:                        lineRecord.id,
                 'Report Key':                  mrlReportKey,
                 'Request ID':                  mrlRequestIdStr,
                 'Company Name':                mrlCompany,
@@ -2356,7 +2362,6 @@ let wfFoundRecId = null;
                 'Qty Received':                0,
                 'Order Cancelled':             'No',
               });
-            } catch(ssreqErr) { console.warn('SSReq webhook error:', ssreqErr.message); }
 
             // Find or create WSR row and link this line to it (both Requested + Collected links)
             const wfMatRec = CACHE.materials.find(r => r.id === item.recId);
@@ -2397,6 +2402,11 @@ let wfFoundRecId = null;
             console.error(`❌ Failed to create line item for ${item.recId}:`, err.message);
           }
         }
+
+        // Send all SSReq_Data creates for this request as one batch
+        try {
+          await triggerSSReqWebhookBatch(ssreqBatch);
+        } catch(ssreqErr) { console.warn('SSReq webhook batch error:', ssreqErr.message); }
 
         // === POPULATE SSR (Subcontractor Stock Report — Requested) ===
         // Group created MRL lines by material → find/create SSR row → batch update
@@ -4003,17 +4013,22 @@ async function triggerMRWebhook(record) {
 
 // ── SSReq webhook — fires per line item immediately after creation ─────────
 // Sends directly to Power Automate bypassing slow Airtable automation trigger
-async function triggerSSReqWebhook(payload) {
+async function triggerSSReqWebhookBatch(records) {
   if (typeof PA_MR_WEBHOOK === 'undefined' || !PA_MR_WEBHOOK) return;
+  if (!records || !records.length) return;
   try {
-    await fetch(PA_MR_WEBHOOK, {
+    const resp = await fetch(PA_MR_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ record: { id: payload.lineId, fields: payload } }),
+      body: JSON.stringify({ records }),
     });
-    console.log('✅ SSReq webhook fired for', payload['Report Key']);
+    if (resp.ok || resp.status === 202) {
+      console.log(`✅ SSReq webhook batch sent: ${records.length} record(s), status ${resp.status}`);
+    } else {
+      console.warn(`SSReq webhook batch failed with status ${resp.status}`);
+    }
   } catch(err) {
-    console.warn('SSReq webhook failed:', err.message);
+    console.warn('SSReq webhook batch failed:', err.message);
   }
 }
 
