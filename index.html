@@ -761,7 +761,15 @@ async function atCreate(tableId, fields, retries = 3) {
       });
       if (res.ok) return res.json();
       const errText = await res.text();
-      // Don't retry on client errors (4xx) — only on server/network errors
+      // 429 = rate limited, not a bad request — always worth retrying with backoff.
+      // Other 4xx are genuine client errors (bad data, etc.) — don't retry those.
+      if (res.status === 429) {
+        if (attempt === retries) throw new Error(`AT create 429: ${errText}`);
+        const retryAfterSec = parseFloat(res.headers.get('Retry-After')) || (2 * attempt);
+        console.warn(`atCreate rate limited (429) — retrying in ${retryAfterSec}s…`);
+        await new Promise(r => setTimeout(r, retryAfterSec * 1000));
+        continue;
+      }
       if (res.status >= 400 && res.status < 500) throw new Error(`AT create ${res.status}: ${errText}`);
       if (attempt === retries) throw new Error(`AT create ${res.status}: ${errText}`);
       console.warn(`atCreate attempt ${attempt} failed (${res.status}) — retrying…`);
@@ -774,16 +782,28 @@ async function atCreate(tableId, fields, retries = 3) {
   }
 }
 
-// Batch create up to 10 records in one API call
-async function atCreateBatch(tableId, fieldsArray) {
-  const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ records: fieldsArray.map(fields => ({ fields })) })
-  });
-  if (!res.ok) throw new Error(`AT batch create ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.records;
+// Batch create up to 10 records in one API call — retries on 429/5xx like atCreate
+async function atCreateBatch(tableId, fieldsArray, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const res = await fetch(`${AT_API}/${AT_BASE}/${tableId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ records: fieldsArray.map(fields => ({ fields })) })
+    });
+    if (res.ok) { const data = await res.json(); return data.records; }
+    const errText = await res.text();
+    if (res.status === 429) {
+      if (attempt === retries) throw new Error(`AT batch create 429: ${errText}`);
+      const retryAfterSec = parseFloat(res.headers.get('Retry-After')) || (2 * attempt);
+      console.warn(`atCreateBatch rate limited (429) — retrying in ${retryAfterSec}s…`);
+      await new Promise(r => setTimeout(r, retryAfterSec * 1000));
+      continue;
+    }
+    if (res.status >= 400 && res.status < 500) throw new Error(`AT batch create ${res.status}: ${errText}`);
+    if (attempt === retries) throw new Error(`AT batch create ${res.status}: ${errText}`);
+    console.warn(`atCreateBatch attempt ${attempt} failed (${res.status}) — retrying…`);
+    await new Promise(r => setTimeout(r, 2000 * attempt));
+  }
 }
 
 // Fetch all WSR rows for a warehouse and send as one batch to Power Automate
@@ -1134,6 +1154,13 @@ async function atUpdate(tableId, recordId, fields, retries = 3) {
       });
       if (res.ok) return res.json();
       const errText = await res.text();
+      if (res.status === 429) {
+        if (attempt === retries) throw new Error(`AT update 429: ${errText}`);
+        const retryAfterSec = parseFloat(res.headers.get('Retry-After')) || (2 * attempt);
+        console.warn(`atUpdate rate limited (429) — retrying in ${retryAfterSec}s…`);
+        await new Promise(r => setTimeout(r, retryAfterSec * 1000));
+        continue;
+      }
       if (res.status >= 400 && res.status < 500) throw new Error(`AT update ${res.status}: ${errText}`);
       if (attempt === retries) throw new Error(`AT update ${res.status}: ${errText}`);
       console.warn(`atUpdate attempt ${attempt} failed (${res.status}) — retrying…`);
@@ -2248,7 +2275,7 @@ let wfFoundRecId = null;
           console.log('Request ID fetched:', mrlRequestIdStr);
         } catch(e) { console.warn('Could not fetch Request ID:', e.message); }
 
-        // === CREATE LINE ITEMS (using Field IDs for safety) ===
+        // === CREATE LINE ITEMS (batched, up to 10 per API call) ===
         console.log('Creating', reqItems.length, 'line items for request', mainRequestId);
         
         // Get location name for WSR lookup
@@ -2256,75 +2283,86 @@ let wfFoundRecId = null;
         const wfLocName    = wfLocOpt2?.dataset?.location || '';
         const ssreqBatch = [];
 
-        for (const item of reqItems) {
+        const mrlBatchFields = reqItems.map(item => ({
+          'fldzjlylKhSe8mWD2': [mainRequestId],
+          'fldM7zHq6l40DxJPR': [item.recId],
+          'fldkbdMJjKvi2sp8X': item.qty,
+        }));
+        const createdLines = []; // { lineId, recId, qty }
+        for (let i = 0; i < mrlBatchFields.length; i += 10) {
+          const chunk = mrlBatchFields.slice(i, i + 10);
           try {
-            const lineRecord = await atCreate(TBL.materialsRequestLines, {
-              'fldzjlylKhSe8mWD2': [mainRequestId],
-              'fldM7zHq6l40DxJPR': [item.recId],
-              'fldkbdMJjKvi2sp8X': item.qty
-            }, 1); // retries=1: no retry — prevents duplicates
-            createdMrlLines.push({ mrlId: lineRecord.id, matRecId: item.recId });
-            console.log(`✅ Line item created for material ${item.recId} → Qty ${item.qty}`);
-
-            // Queue SSReq_Data record — sent as one batch after the loop, using
-            // the Airtable-generated Request ID
-            const mrlMat     = CACHE.materials.find(r => r.id === item.recId);
-            const mrlInvCode = mrlMat?.fields?.['Inventory Code'] || '';
-            const mrlRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
-            const mrlCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
-            const mrlReportKey = `${mrlRequestIdStr} | ${wfLocName} | ${mrlRepName} | ${mrlInvCode}`;
-            ssreqBatch.push({
-              lineId:                        lineRecord.id,
-                'Report Key':                  mrlReportKey,
-                'Request ID':                  mrlRequestIdStr,
-                'Company Name':                mrlCompany,
-                'Company Representative Name': mrlRepName,
-                'Location':                    wfLocName,
-                'Date Required':               document.getElementById('wf-dateReq').value,
-                'Date Collected':              '',
-                'Product Description':         mrlMat?.fields?.['Description'] || '',
-                'Qty Requested':               item.qty,
-                'Qty Received':                0,
-                'Order Cancelled':             'No',
-              });
-
-            // Find or create WSR row and link this line to it (both Requested + Collected links)
-            const wfMatRec = CACHE.materials.find(r => r.id === item.recId);
-            const wfBinId  = wfMatRec?.fields?.['Bin ID'] || '';
-            try {
-              const wfWsrRows = await atFetchAll(TBL.warehouseStockReport, {
-                filterByFormula: `AND(FIND("${wfLocName}",ARRAYJOIN({Warehouse Location})),FIND("${wfBinId}",ARRAYJOIN({Bin ID})))`,
-                fields: ['Report Key', 'Materials Request Lines', 'Materials Request Lines (Requested)'],
-              });
-              let wfWsrId = null;
-              if (wfWsrRows.length > 0) {
-                wfWsrId = wfWsrRows[0].id;
-                // Append this line to both WSR link fields
-                const existingColl = wfWsrRows[0].fields['Materials Request Lines'] || [];
-                const existingReq  = wfWsrRows[0].fields['Materials Request Lines (Requested)'] || [];
-                await atUpdate(TBL.warehouseStockReport, wfWsrId, {
-                  'fldyvmOr9Osm0wZ1U': [...existingColl, lineRecord.id],
-                  'fldNbMU9i8X0wfFV2': [...existingReq,  lineRecord.id],
-                });
-                console.log(`✅ Linked line ${lineRecord.id} to WSR row ${wfWsrId}`);
-              } else {
-                // Create WSR row — linking will happen via the back-link automatically
-                const newWfWsr = await atCreate(TBL.warehouseStockReport, {
-                  [FLD.wsr_warehouse]: [locRecId],
-                  [FLD.wsr_material]:  [item.recId],
-                });
-                wfWsrId = newWfWsr.id;
-                await atUpdate(TBL.warehouseStockReport, wfWsrId, {
-                  'fldyvmOr9Osm0wZ1U': [lineRecord.id],
-                  'fldNbMU9i8X0wfFV2': [lineRecord.id],
-                });
-                console.log(`Created WSR row ${wfWsrId} and linked line ${lineRecord.id}`);
-              }
-            } catch(wsrErr2) {
-              console.warn('WSR link for request line failed:', wsrErr2.message);
-            }
+            const created = await atCreateBatch(TBL.materialsRequestLines, chunk);
+            created.forEach((rec, idx) => {
+              const src = reqItems[i + idx];
+              createdLines.push({ lineId: rec.id, recId: src.recId, qty: src.qty });
+              createdMrlLines.push({ mrlId: rec.id, matRecId: src.recId });
+              console.log(`✅ Line item created for material ${src.recId} → Qty ${src.qty}`);
+            });
           } catch (err) {
-            console.error(`❌ Failed to create line item for ${item.recId}:`, err.message);
+            console.error(`❌ Batch create failed for items ${i}-${i + chunk.length - 1}:`, err.message);
+          }
+        }
+
+        // Build SSReq_Data payload for all created lines — using the
+        // Airtable-generated Request ID, no additional API calls needed
+        createdLines.forEach(item => {
+          const mrlMat     = CACHE.materials.find(r => r.id === item.recId);
+          const mrlInvCode = mrlMat?.fields?.['Inventory Code'] || '';
+          const mrlRepName = document.getElementById('wf-rep').options[document.getElementById('wf-rep').selectedIndex]?.textContent?.trim() || '';
+          const mrlCompany = document.getElementById('wf-company').options[document.getElementById('wf-company').selectedIndex]?.textContent?.trim() || '';
+          const mrlReportKey = `${mrlRequestIdStr} | ${wfLocName} | ${mrlRepName} | ${mrlInvCode}`;
+          ssreqBatch.push({
+            lineId:                        item.lineId,
+            'Report Key':                  mrlReportKey,
+            'Request ID':                  mrlRequestIdStr,
+            'Company Name':                mrlCompany,
+            'Company Representative Name': mrlRepName,
+            'Location':                    wfLocName,
+            'Date Required':               document.getElementById('wf-dateReq').value,
+            'Date Collected':              '',
+            'Product Description':         mrlMat?.fields?.['Description'] || '',
+            'Qty Requested':               item.qty,
+            'Qty Received':                0,
+            'Order Cancelled':             'No',
+          });
+        });
+
+        // Find or create WSR row and link each created line to it (both Requested + Collected links)
+        for (const item of createdLines) {
+          const wfMatRec = CACHE.materials.find(r => r.id === item.recId);
+          const wfBinId  = wfMatRec?.fields?.['Bin ID'] || '';
+          try {
+            const wfWsrRows = await atFetchAll(TBL.warehouseStockReport, {
+              filterByFormula: `AND(FIND("${wfLocName}",ARRAYJOIN({Warehouse Location})),FIND("${wfBinId}",ARRAYJOIN({Bin ID})))`,
+              fields: ['Report Key', 'Materials Request Lines', 'Materials Request Lines (Requested)'],
+            });
+            let wfWsrId = null;
+            if (wfWsrRows.length > 0) {
+              wfWsrId = wfWsrRows[0].id;
+              // Append this line to both WSR link fields
+              const existingColl = wfWsrRows[0].fields['Materials Request Lines'] || [];
+              const existingReq  = wfWsrRows[0].fields['Materials Request Lines (Requested)'] || [];
+              await atUpdate(TBL.warehouseStockReport, wfWsrId, {
+                'fldyvmOr9Osm0wZ1U': [...existingColl, item.lineId],
+                'fldNbMU9i8X0wfFV2': [...existingReq,  item.lineId],
+              });
+              console.log(`✅ Linked line ${item.lineId} to WSR row ${wfWsrId}`);
+            } else {
+              // Create WSR row — linking will happen via the back-link automatically
+              const newWfWsr = await atCreate(TBL.warehouseStockReport, {
+                [FLD.wsr_warehouse]: [locRecId],
+                [FLD.wsr_material]:  [item.recId],
+              });
+              wfWsrId = newWfWsr.id;
+              await atUpdate(TBL.warehouseStockReport, wfWsrId, {
+                'fldyvmOr9Osm0wZ1U': [item.lineId],
+                'fldNbMU9i8X0wfFV2': [item.lineId],
+              });
+              console.log(`Created WSR row ${wfWsrId} and linked line ${item.lineId}`);
+            }
+          } catch(wsrErr2) {
+            console.warn('WSR link for request line failed:', wsrErr2.message);
           }
         }
 
@@ -2408,25 +2446,27 @@ let wfFoundRecId = null;
           console.warn('SSR new request population failed:', ssrErr.message);
         }
 
-        // === RESERVE STOCK (reduce available qty) ===
+        // === RESERVE STOCK (reduce available qty) — chunked in groups of 4 ===
         const locOpt = document.getElementById('wf-location').options[document.getElementById('wf-location').selectedIndex];
         const locName = locOpt?.dataset?.location || '';
         const stateName = document.getElementById('wf-state').value;
         const stockField = getStockFieldName(stateName, locName);
 
-        for (const item of reqItems) {
-          const matRec = CACHE.materials.find(r => r.id === item.recId);
-          if (!matRec) continue;
+        for (let i = 0; i < reqItems.length; i += 4) {
+          await Promise.all(reqItems.slice(i, i + 4).map(async item => {
+            const matRec = CACHE.materials.find(r => r.id === item.recId);
+            if (!matRec) return;
 
-          const currentStock = parseFloat(matRec.fields[stockField]) || 0;
-          const newStock = Math.max(0, currentStock - item.qty);
+            const currentStock = parseFloat(matRec.fields[stockField]) || 0;
+            const newStock = Math.max(0, currentStock - item.qty);
 
-          await atUpdate(TBL.materialsQuantities, item.recId, {
-            [stockField]: newStock
-          });
+            await atUpdate(TBL.materialsQuantities, item.recId, {
+              [stockField]: newStock
+            }).catch(err => console.warn('Stock reservation update failed:', err.message));
 
-          // Update local cache
-          matRec.fields[stockField] = newStock;
+            // Update local cache
+            matRec.fields[stockField] = newStock;
+          }));
         }
 
         // Send SSR batch to Excel after delay for rollups to settle

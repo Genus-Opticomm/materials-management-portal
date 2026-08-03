@@ -68,6 +68,12 @@ async function atCreate(tableId, fields, retries = 3) {
       });
       if (res.ok) return res.json();
       const errText = await res.text();
+      if (res.status === 429) {
+        if (attempt === retries) throw new Error(`AT create 429: ${errText}`);
+        const retryAfterSec = parseFloat(res.headers.get('Retry-After')) || (2 * attempt);
+        await new Promise(r => setTimeout(r, retryAfterSec * 1000));
+        continue;
+      }
       if (res.status >= 400 && res.status < 500) throw new Error(`AT create ${res.status}: ${errText}`);
       if (attempt === retries) throw new Error(`AT create ${res.status}: ${errText}`);
       await new Promise(r => setTimeout(r, 2000 * attempt));
@@ -88,6 +94,12 @@ async function atUpdate(tableId, recordId, fields, retries = 3) {
       });
       if (res.ok) return res.json();
       const errText = await res.text();
+      if (res.status === 429) {
+        if (attempt === retries) throw new Error(`AT update 429: ${errText}`);
+        const retryAfterSec = parseFloat(res.headers.get('Retry-After')) || (2 * attempt);
+        await new Promise(r => setTimeout(r, retryAfterSec * 1000));
+        continue;
+      }
       if (res.status >= 400 && res.status < 500) throw new Error(`AT update ${res.status}: ${errText}`);
       if (attempt === retries) throw new Error(`AT update ${res.status}: ${errText}`);
       await new Promise(r => setTimeout(r, 2000 * attempt));
@@ -108,6 +120,12 @@ async function atCreateBatch(tableId, fieldsArray, retries = 3) {
     });
     if (res.ok) { const data = await res.json(); return data.records; }
     const errText = await res.text();
+    if (res.status === 429) {
+      if (attempt === retries) throw new Error(`AT createBatch 429: ${errText}`);
+      const retryAfterSec = parseFloat(res.headers.get('Retry-After')) || (2 * attempt);
+      await new Promise(r => setTimeout(r, retryAfterSec * 1000));
+      continue;
+    }
     if (res.status >= 400 && res.status < 500) throw new Error(`AT createBatch ${res.status}: ${errText}`);
     if (attempt === retries) throw new Error(`AT createBatch ${res.status}: ${errText}`);
     await new Promise(r => setTimeout(r, 2000 * attempt));
