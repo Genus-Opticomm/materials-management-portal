@@ -17,8 +17,8 @@ const AT_TOKEN = 'patbyyxDeG1vyXDt1.bf541626ff51d7ff78db16476566f413b3fd3159d767
 const AT_BASE  = 'appLWbPBLepjoO6F4';
 const AT_API   = 'https://api.airtable.com/v0';
 
-const PA_SSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6c7551321b01416c8d7a0b6127f58fb0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=7ZhHQogCqtp7a6gp-90tXAiP4whoyVyKyZMVLBXYvL4';
-const PA_SJR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/7e65653d80fa42bea5045d2cb94c4080/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=30TUImpQ82nwDumYglJsEOl6Zn3wRlkb3kmYtyxlS4A';
+const PA_SSR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/00/workflows/afcb855121704b368e88cb873ee1e4ce/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=pTOoOwlgLylNDq0wA8-1PZFMnrcJ4b0qA4HkfezbPV4';
+const PA_SJR_WEBHOOK = 'https://default32a9c90e5bf140a39c28672bbed3bb.f7.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/05/workflows/bc4c83f2f0cf412b9ecd132a63e43d13/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=5RJ-V0IxNvbdfH-VC0YDzldd3tWkoS-ten-u1VlqXUo';
 
 const TBL = {
   materialsUsed:            'tblgfw9MvYDAtZEHz',
