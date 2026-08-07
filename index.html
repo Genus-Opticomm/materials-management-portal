@@ -1385,6 +1385,21 @@ async function initData() {
     CACHE.subcontractors  = sc;
     CACHE.representatives = reps;
     CACHE.materials         = mats;
+    // Sort once, centrally — every form builds its material lists from this
+    // same cache, so this single sort keeps ordering consistent everywhere
+    // (grouped by Type in the existing TYPE_ORDER sequence, alphabetical by
+    // Description within each Type) without needing to touch each form's
+    // individual table-rendering function.
+    CACHE.materials.sort((a, b) => {
+      const typeA = a.fields['Type'] || 'Other';
+      const typeB = b.fields['Type'] || 'Other';
+      const rankA = TYPE_ORDER.includes(typeA) ? TYPE_ORDER.indexOf(typeA) : TYPE_ORDER.length;
+      const rankB = TYPE_ORDER.includes(typeB) ? TYPE_ORDER.indexOf(typeB) : TYPE_ORDER.length;
+      if (rankA !== rankB) return rankA - rankB;
+      const descA = (a.fields['Description'] || '').toLowerCase();
+      const descB = (b.fields['Description'] || '').toLowerCase();
+      return descA.localeCompare(descB);
+    });
     CACHE.opticommWarehouses  = ocwh;
     CACHE.opticommByState     = {};
     CACHE.opticommByRecId     = {};
@@ -1740,6 +1755,7 @@ function goBack() {
     document.getElementById('inv-manager').value = '';
     document.getElementById('inv-subsections').innerHTML = '';
     document.getElementById('inv-notice').style.display = 'block';
+    hidePatience('inv');
   } catch(e) {}
 
   // Reset Field Workforce Materials Request
@@ -1771,6 +1787,7 @@ function goBack() {
     buildRepDropdown(document.getElementById('dm-rep'), '', document.getElementById('dm-email'), document.getElementById('dm-mobile'));
     document.getElementById('dm-subsections').innerHTML = '';
     document.getElementById('dm-notice').style.display = 'block';
+    hidePatience('dm');
   } catch(e) {}
 
   // Reset Contractor Stock Return
@@ -1783,6 +1800,7 @@ function goBack() {
     document.getElementById('cr-notice').style.display = 'block';
     buildStateDropdown(document.getElementById('cr-wh-state'));
     buildLocationDropdown(document.getElementById('cr-wh-location'), '');
+    hidePatience('cr');
   } catch(e) {}
 
   // Reset Opticomm Stock Return
@@ -1794,6 +1812,7 @@ function goBack() {
     buildOpticommDropdown(document.getElementById('or-opticomm-wh'), '');
     document.getElementById('or-subsections').innerHTML = '';
     document.getElementById('or-notice').style.display = 'block';
+    hidePatience('or');
   } catch(e) {}
 
   document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
@@ -3101,8 +3120,12 @@ function buildDMTable(containerId, records) {
     'Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
 
   const groups = {};
-  records.forEach(r => {
-    const type = r.fields['Type'] || 'Other';
+  // Only show materials this rep actually has stock of — zero on-hand items
+  // are hidden entirely rather than shown as a disabled row
+  records
+    .filter(r => (r.fields['_onhand'] !== undefined ? r.fields['_onhand'] : 0) > 0)
+    .forEach(r => {
+      const type = r.fields['Type'] || 'Other';
     if (!groups[type]) groups[type] = [];
     groups[type].push(r);
   });
