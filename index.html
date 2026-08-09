@@ -709,7 +709,15 @@ const FLD = {
   ssr_contractorReturns: 'fldkDCT4Z6pu9JXYC',
 };
 
-const TYPE_ORDER = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery','Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
+const TYPE_ORDER = ['Access Communications','Commscope Direct Delivery','Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Lead in Assemblies','OptiComm Warehouse','Prysmian/4Cabling'];
+
+// The "Type" field's actual value in Airtable is spelled "OptiComm Warehouse" —
+// changed here only for what's DISPLAYED to the user, not for grouping/sorting
+// (which must keep matching Airtable's real value, above, or the whole
+// "OptiComm Warehouse" group would silently stop being recognized).
+function displayType(type) {
+  return type === 'OptiComm Warehouse' ? 'Opticomm Warehouse' : type;
+}
 
 // ═══════════════════════════════════════════════════
 //  IN-MEMORY CACHE (loaded once on page load)
@@ -1398,7 +1406,7 @@ async function initData() {
       if (rankA !== rankB) return rankA - rankB;
       const descA = (a.fields['Description'] || '').toLowerCase();
       const descB = (b.fields['Description'] || '').toLowerCase();
-      return descA.localeCompare(descB);
+      return descA.localeCompare(descB, undefined, { numeric: true, sensitivity: 'base' });
     });
     CACHE.opticommWarehouses  = ocwh;
     CACHE.opticommByState     = {};
@@ -1712,11 +1720,15 @@ function showPatience(formId) {
     b.disabled = true; b.style.opacity = '0.5'; b.style.pointerEvents = 'none';
   });
 }
-function hidePatience(formId) {
+function hidePatience(formId, defaultLabel) {
   const el = document.getElementById(formId + '-patience');
   if (el) el.classList.remove('visible');
   const btn = document.getElementById(formId + '-submitBtn');
-  if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  if (btn) {
+    btn.disabled = false;
+    btn.style.opacity = '';
+    if (defaultLabel) btn.textContent = defaultLabel; // clears the "Submitting…" spinner label left by btnLoading()
+  }
   document.querySelectorAll('.form-panel.active .btn-back').forEach(b => {
     b.disabled = false; b.style.opacity = ''; b.style.pointerEvents = '';
   });
@@ -1755,7 +1767,7 @@ function goBack() {
     document.getElementById('inv-manager').value = '';
     document.getElementById('inv-subsections').innerHTML = '';
     document.getElementById('inv-notice').style.display = 'block';
-    hidePatience('inv');
+    hidePatience('inv', 'Submit');
   } catch(e) {}
 
   // Reset Field Workforce Materials Request
@@ -1787,7 +1799,7 @@ function goBack() {
     buildRepDropdown(document.getElementById('dm-rep'), '', document.getElementById('dm-email'), document.getElementById('dm-mobile'));
     document.getElementById('dm-subsections').innerHTML = '';
     document.getElementById('dm-notice').style.display = 'block';
-    hidePatience('dm');
+    hidePatience('dm', 'Submit Daily Record');
   } catch(e) {}
 
   // Reset Contractor Stock Return
@@ -1800,7 +1812,7 @@ function goBack() {
     document.getElementById('cr-notice').style.display = 'block';
     buildStateDropdown(document.getElementById('cr-wh-state'));
     buildLocationDropdown(document.getElementById('cr-wh-location'), '');
-    hidePatience('cr');
+    hidePatience('cr', 'Submit Return');
   } catch(e) {}
 
   // Reset Opticomm Stock Return
@@ -1812,7 +1824,7 @@ function goBack() {
     buildOpticommDropdown(document.getElementById('or-opticomm-wh'), '');
     document.getElementById('or-subsections').innerHTML = '';
     document.getElementById('or-notice').style.display = 'block';
-    hidePatience('or');
+    hidePatience('or', 'Submit Return');
   } catch(e) {}
 
   document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
@@ -3116,8 +3128,8 @@ function buildDMTable(containerId, records) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
 
-  const TYPE_ORDER = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery',
-    'Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
+  const TYPE_ORDER = ['Access Communications','Commscope Direct Delivery',
+    'Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Lead in Assemblies','OptiComm Warehouse','Prysmian/4Cabling'];
 
   const groups = {};
   // Only show materials this rep actually has stock of — zero on-hand items
@@ -3531,8 +3543,8 @@ async function loadRepInventoryForReturn(repRecId, repName) {
     }
 
     // Render table grouped by type
-    const TYPE_ORDER_LOCAL = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery',
-      'Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
+    const TYPE_ORDER_LOCAL = ['Access Communications','Commscope Direct Delivery',
+      'Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Lead in Assemblies','OptiComm Warehouse','Prysmian/4Cabling'];
     const groups = {};
     materialsWithStock.forEach(r => {
       const type = r.fields['Type'] || 'Other';
@@ -3907,8 +3919,8 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
       return;
     }
 
-    const TYPE_ORDER_LOCAL = ['OptiComm Warehouse','Access Communications','Commscope Direct Delivery',
-      'Lead in Assemblies','Corning Velocity Lead in Assemblies','Prysmian/4Cabling','INFOCUS/EPSILON'];
+    const TYPE_ORDER_LOCAL = ['Access Communications','Commscope Direct Delivery',
+      'Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Lead in Assemblies','OptiComm Warehouse','Prysmian/4Cabling'];
     const groups = {};
     materialsWithStock.forEach(r => {
       const type = r.fields['Type'] || 'Other';
