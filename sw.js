@@ -230,18 +230,22 @@ async function submitDailyMaterialUsed(payload) {
   let remainingItems = usedItems;
   if (existingMulLineIds.length > 0) {
     const idFormula = 'OR(' + existingMulLineIds.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
-    const existingMulRows = await atFetchAll(TBL.materialsUsedLines, { filterByFormula: idFormula, fields: ['Material', 'Qty Used'] }).catch(() => []);
+    const existingMulRows = await atFetchAll(TBL.materialsUsedLines, { filterByFormula: idFormula, fields: ['Material', 'Qty Used', 'Note'] }).catch(() => []);
     const alreadyCreatedMatIds = new Set(existingMulRows.map(r => (r.fields['Material'] || [])[0]).filter(Boolean));
-    createdUsedLineIds = existingMulRows.map(r => ({ lineId: r.id, recId: (r.fields['Material'] || [])[0], qty: r.fields['Qty Used'] || 0 }));
+    createdUsedLineIds = existingMulRows.map(r => ({ lineId: r.id, recId: (r.fields['Material'] || [])[0], qty: r.fields['Qty Used'] || 0, note: r.fields['Note'] || '' }));
     remainingItems = usedItems.filter(item => !alreadyCreatedMatIds.has(item.recId));
   }
-  const mulBatchFields = remainingItems.map(item => ({
-    'fldbEHOSuv028hMjD': [mainUsedId], 'fld0u8aUHdRsSIJLm': [item.recId],
-    'fldGV26CqV55FYGv6': item.qty, 'flduIFkorq5wVuNNz': dmDate,
-  }));
+  const mulBatchFields = remainingItems.map(item => {
+    const fields = {
+      'fldbEHOSuv028hMjD': [mainUsedId], 'fld0u8aUHdRsSIJLm': [item.recId],
+      'fldGV26CqV55FYGv6': item.qty, 'flduIFkorq5wVuNNz': dmDate,
+    };
+    if (item.note) fields['Note'] = item.note;
+    return fields;
+  });
   for (let i = 0; i < mulBatchFields.length; i += 10) {
     const created = await atCreateBatch(TBL.materialsUsedLines, mulBatchFields.slice(i, i + 10));
-    created.forEach((rec, idx) => createdUsedLineIds.push({ lineId: rec.id, recId: remainingItems[i + idx].recId, qty: remainingItems[i + idx].qty }));
+    created.forEach((rec, idx) => createdUsedLineIds.push({ lineId: rec.id, recId: remainingItems[i + idx].recId, qty: remainingItems[i + idx].qty, note: remainingItems[i + idx].note || '' }));
   }
 
   const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
@@ -289,7 +293,9 @@ async function submitDailyMaterialUsed(payload) {
   for (let i = 0; i < sjrPendingItems.length; i += 4) {
     await Promise.all(sjrPendingItems.slice(i, i + 4).map(async item => {
       try {
-        await atCreate(TBL.subcontractorJobReport, { 'fldOsnJEHcWjfe7fV': [repRecId], 'fldkCo5VFj09XALYv': [item.lineId] }, 1);
+        const sjrFields = { 'fldOsnJEHcWjfe7fV': [repRecId], 'fldkCo5VFj09XALYv': [item.lineId] };
+        if (item.note) sjrFields['Note'] = item.note;
+        await atCreate(TBL.subcontractorJobReport, sjrFields, 1);
       } catch (err) { console.warn('[sw] SJR create failed:', err.message); }
     }));
   }
@@ -338,6 +344,7 @@ async function submitDailyMaterialUsed(payload) {
       itCode:        mf['IT Code'] || '',
       description:   mf['Description'] || '',
       qtyUsed:       item.qty || 0,
+      note:          item.note || '',
     };
   });
 

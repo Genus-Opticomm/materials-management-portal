@@ -2831,27 +2831,35 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
       const idFormula = 'OR(' + existingMulLineIds.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
       const existingMulRows = await atFetchAll(TBL.materialsUsedLines, {
         filterByFormula: idFormula,
-        fields: ['Material', 'Qty Used'],
+        fields: ['Material', 'Qty Used', 'Note'],
       }).catch(() => []);
       const alreadyCreatedMatIds = new Set(
         existingMulRows.map(r => (r.fields['Material'] || [])[0]).filter(Boolean)
       );
       createdUsedLineIds = existingMulRows.map(r => ({
         lineId: r.id, recId: (r.fields['Material'] || [])[0], qty: r.fields['Qty Used'] || 0,
+        note: r.fields['Note'] || '',
       }));
       remainingItems = usedItems.filter(item => !alreadyCreatedMatIds.has(item.recId));
     }
-    const mulBatchFields = remainingItems.map(item => ({
-      'fldbEHOSuv028hMjD': [mainUsedId],
-      'fld0u8aUHdRsSIJLm': [item.recId],
-      'fldGV26CqV55FYGv6': item.qty,
-      'flduIFkorq5wVuNNz': dmDate,
-    }));
+    const mulBatchFields = remainingItems.map(item => {
+      const fields = {
+        'fldbEHOSuv028hMjD': [mainUsedId],
+        'fld0u8aUHdRsSIJLm': [item.recId],
+        'fldGV26CqV55FYGv6': item.qty,
+        'flduIFkorq5wVuNNz': dmDate,
+      };
+      if (item.note) fields['Note'] = item.note; // qty > 1 only — referenced by name, no field ID needed
+      return fields;
+    });
     for (let i = 0; i < mulBatchFields.length; i += 10) {
       const chunk = mulBatchFields.slice(i, i + 10);
       const created = await atCreateBatch(TBL.materialsUsedLines, chunk);
       created.forEach((rec, idx) => {
-        createdUsedLineIds.push({ lineId: rec.id, recId: remainingItems[i + idx].recId, qty: remainingItems[i + idx].qty });
+        createdUsedLineIds.push({
+          lineId: rec.id, recId: remainingItems[i + idx].recId, qty: remainingItems[i + idx].qty,
+          note: remainingItems[i + idx].note || '',
+        });
         console.log(`✅ MUL created: ${rec.id}`);
       });
     }
@@ -2927,10 +2935,12 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
     for (let i = 0; i < sjrPendingItems.length; i += 4) {
       await Promise.all(sjrPendingItems.slice(i, i + 4).map(async item => {
         try {
-          await atCreate(TBL.subcontractorJobReport, {
+          const sjrFields = {
             'fldOsnJEHcWjfe7fV': [repRecId],
             'fldkCo5VFj09XALYv': [item.lineId],
-          }, 1); // retries=1: no retry — prevents duplicates on network timeout
+          };
+          if (item.note) sjrFields['Note'] = item.note; // referenced by name, no field ID needed
+          await atCreate(TBL.subcontractorJobReport, sjrFields, 1); // retries=1: no retry — prevents duplicates on network timeout
         } catch(err) { console.warn('SJR create failed:', err.message); }
       }));
     }
@@ -2962,6 +2972,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
         itCode:        mat?.fields?.['IT Code'] || '',
         description:   mat?.fields?.['Description'] || '',
         qtyUsed:       item.qty || 0,
+        note:          item.note || '',
       };
     });
 
@@ -3010,6 +3021,20 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
     if (document.querySelectorAll('.dm-used.qty-over').length > 0) {
       alert('One or more quantities exceed on-hand stock.'); return;
     }
+    // Note is required whenever qty used is more than 1
+    let missingNote = false;
+    document.querySelectorAll('.dm-used').forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      const noteSel = inp.closest('tr')?.querySelector('.dm-note');
+      if (qty > 1 && noteSel && !noteSel.value) {
+        noteSel.classList.add('qty-over');
+        missingNote = true;
+      }
+    });
+    if (missingNote) {
+      alert('Please select a Note for any item with a quantity used greater than 1.');
+      return;
+    }
     showPatience('dm');
 
     const btn = document.getElementById('dm-submitBtn');
@@ -3019,7 +3044,14 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
     const usedItems = [];
     document.querySelectorAll('.dm-used').forEach(inp => {
       const qty = parseInt(inp.value) || 0;
-      if (qty > 0) usedItems.push({ recId: inp.dataset.record, qty });
+      if (qty > 0) {
+        const item = { recId: inp.dataset.record, qty };
+        if (qty > 1) {
+          const noteSel = inp.closest('tr')?.querySelector('.dm-note');
+          item.note = noteSel ? noteSel.value : '';
+        }
+        usedItems.push(item);
+      }
     });
     const fullJobCode = document.getElementById('dm-jobcode').value.trim();
     const dmDate = document.getElementById('dm-date').value;
@@ -3138,9 +3170,9 @@ function buildDMTable(containerId, records) {
     .filter(r => (r.fields['_onhand'] !== undefined ? r.fields['_onhand'] : 0) > 0)
     .forEach(r => {
       const type = r.fields['Type'] || 'Other';
-    if (!groups[type]) groups[type] = [];
-    groups[type].push(r);
-  });
+      if (!groups[type]) groups[type] = [];
+      groups[type].push(r);
+    });
 
   const orderedTypes = TYPE_ORDER.filter(t => groups[t])
     .concat(Object.keys(groups).filter(t => !TYPE_ORDER.includes(t)));
@@ -3170,7 +3202,7 @@ function buildDMTable(containerId, records) {
     tbl.className = 'mat-table';
     tbl.innerHTML = `<thead><tr>
       <th>OP Code</th><th>IT Code</th><th>Description</th>
-      <th>Qty On-Hand</th><th>Qty Used</th>
+      <th>Qty On-Hand</th><th>Qty Used</th><th>Note</th>
     </tr></thead>`;
 
     const tbody = document.createElement('tbody');
@@ -3190,6 +3222,13 @@ function buildDMTable(containerId, records) {
             min="0" value="" placeholder="${noStock ? '—' : '0'}"
             inputmode="numeric" ${noStock ? 'disabled' : ''} />
           <div class="inline-warn">Exceeds on-hand qty</div>
+        </td>
+        <td>
+          <select class="dm-note" data-record="${r.id}" style="display:none;">
+            <option value="">— Select Note —</option>
+            <option value="Material faulty out of box">Material faulty out of box</option>
+            <option value="Material broken during install">Material broken during install</option>
+          </select>
         </td>`;
       tbody.appendChild(tr);
     });
@@ -3216,6 +3255,21 @@ function buildDMTable(containerId, records) {
         onhandCell.textContent = remaining;
         onhandCell.classList.toggle('low', remaining === 0);
       }
+      // Note dropdown — required whenever qty used is more than 1 (e.g. a
+      // faulty/broken unit used alongside a good one). Hidden and cleared
+      // otherwise, so a stale leftover selection can't submit silently.
+      const noteSel = inp.closest('tr')?.querySelector('.dm-note');
+      if (noteSel) {
+        const noteRequired = val > 1;
+        noteSel.style.display = noteRequired ? '' : 'none';
+        if (!noteRequired) { noteSel.value = ''; noteSel.classList.remove('qty-over'); }
+      }
+    });
+  });
+
+  document.querySelectorAll('.dm-note').forEach(sel => {
+    sel.addEventListener('change', () => {
+      if (sel.value) sel.classList.remove('qty-over');
     });
   });
 }
