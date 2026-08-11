@@ -709,15 +709,7 @@ const FLD = {
   ssr_contractorReturns: 'fldkDCT4Z6pu9JXYC',
 };
 
-const TYPE_ORDER = ['Access Communications','Commscope Direct Delivery','Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Lead in Assemblies','OptiComm Warehouse','Prysmian/4Cabling'];
-
-// The "Type" field's actual value in Airtable is spelled "OptiComm Warehouse" —
-// changed here only for what's DISPLAYED to the user, not for grouping/sorting
-// (which must keep matching Airtable's real value, above, or the whole
-// "OptiComm Warehouse" group would silently stop being recognized).
-function displayType(type) {
-  return type === 'OptiComm Warehouse' ? 'Opticomm Warehouse' : type;
-}
+const TYPE_ORDER = ['Access Communications','Commscope Direct Delivery','Commscope Lead in Assemblies','Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Opticomm Warehouse','Prysmian/4Cabling'];
 
 // ═══════════════════════════════════════════════════
 //  IN-MEMORY CACHE (loaded once on page load)
@@ -3160,8 +3152,8 @@ function buildDMTable(containerId, records) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
 
-  const TYPE_ORDER = ['Access Communications','Commscope Direct Delivery',
-    'Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Lead in Assemblies','OptiComm Warehouse','Prysmian/4Cabling'];
+  const TYPE_ORDER = ['Access Communications','Commscope Direct Delivery','Commscope Lead in Assemblies',
+    'Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Opticomm Warehouse','Prysmian/4Cabling'];
 
   const groups = {};
   // Only show materials this rep actually has stock of — zero on-hand items
@@ -3597,8 +3589,8 @@ async function loadRepInventoryForReturn(repRecId, repName) {
     }
 
     // Render table grouped by type
-    const TYPE_ORDER_LOCAL = ['Access Communications','Commscope Direct Delivery',
-      'Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Lead in Assemblies','OptiComm Warehouse','Prysmian/4Cabling'];
+    const TYPE_ORDER_LOCAL = ['Access Communications','Commscope Direct Delivery','Commscope Lead in Assemblies',
+      'Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Opticomm Warehouse','Prysmian/4Cabling'];
     const groups = {};
     materialsWithStock.forEach(r => {
       const type = r.fields['Type'] || 'Other';
@@ -3973,8 +3965,8 @@ async function buildWSRTableForReturn(containerId, whLocRecId, stateVal, locVal,
       return;
     }
 
-    const TYPE_ORDER_LOCAL = ['Access Communications','Commscope Direct Delivery',
-      'Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Lead in Assemblies','OptiComm Warehouse','Prysmian/4Cabling'];
+    const TYPE_ORDER_LOCAL = ['Access Communications','Commscope Direct Delivery','Commscope Lead in Assemblies',
+      'Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Opticomm Warehouse','Prysmian/4Cabling'];
     const groups = {};
     materialsWithStock.forEach(r => {
       const type = r.fields['Type'] || 'Other';
