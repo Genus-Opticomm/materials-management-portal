@@ -178,11 +178,13 @@
       <div class="nav-group" id="nav-group-field">
         <div class="nav-group-label">Field</div>
         <div class="nav-buttons nav-row-main">
-          <button class="nav-btn" data-target="panel-workforce">Field Workforce Materials Request</button>
-          <button class="nav-btn" data-target="panel-daily">Daily Materials Used</button>
+          <button class="nav-btn" data-target="panel-workforce" data-views="bau,ontswapout">Field Workforce Materials Request</button>
+          <button class="nav-btn" data-target="panel-daily" data-views="bau">Daily Materials Used</button>
+          <button class="nav-btn" data-target="panel-ont-swapout" data-views="ontswapout">ONT Swapout</button>
+          <button class="nav-btn" data-target="panel-stock-transfer" data-views="bau,ontswapout">Stock Transfer</button>
         </div>
         <div class="nav-buttons nav-row-return">
-          <button class="nav-btn nav-btn-return" data-target="panel-contractor-return">Contractor Stock Return</button>
+          <button class="nav-btn nav-btn-return" data-target="panel-contractor-return" data-views="bau,ontswapout">Contractor Stock Return</button>
         </div>
       </div>
       <!-- Boots on Ground button hidden until fields confirmed — code preserved below -->
@@ -354,6 +356,121 @@
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
           <div id="dm-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
           <button type="submit" class="btn btn-submit" id="dm-submitBtn">Submit Daily Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══ ONT SWAPOUT ══ -->
+  <div class="form-panel" id="panel-ont-swapout">
+    <div class="panel-title">ONT Swapout</div>
+    <div class="panel-subtitle">Search the OAT job to record the swapout outcome and materials used.</div>
+    <div class="form-wrapper">
+      <div class="success-banner" id="so-success"></div>
+      <form id="formONTSwapout" novalidate>
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group full" id="sogrp-jobcode">
+            <label for="so-jobcode-suffix">OAT / Job Code <span class="req">*</span></label>
+            <div class="search-row">
+              <div class="search-input-wrap">
+                <div style="display:flex;align-items:center;border:1px solid var(--dark-20);border-radius:.5rem;overflow:hidden;background:white;transition:border-color .2s;" id="so-jobcode-wrap">
+                  <span id="so-jobcode-prefix" style="padding:.75rem .5rem .75rem .75rem;color:var(--primary-mid);font-size:1rem;font-family:'Exo',sans-serif;white-space:nowrap;user-select:none;flex-shrink:0;">OAT000000</span>
+                  <input type="text" id="so-jobcode-suffix" placeholder="000000" maxlength="6" inputmode="numeric" required
+                    style="border:none;outline:none;padding:.75rem .75rem .75rem 0;font-size:1rem;font-family:'Exo',sans-serif;color:var(--primary-dark);background:transparent;width:100%;box-shadow:none;" />
+                </div>
+              </div>
+              <button type="button" class="search-btn" id="so-searchBtn" onclick="soSearchOAT()">Search</button>
+            </div>
+            <input type="hidden" id="so-jobcode" />
+            <input type="hidden" id="so-ontRecId" />
+            <div class="search-status" id="so-searchStatus"></div>
+          </div>
+          <div class="field-group full" id="sogrp-address" style="display:none;">
+            <label for="so-address">Site Address</label>
+            <input type="text" id="so-address" readonly />
+          </div>
+          <div class="field-group" id="sogrp-company">
+            <label for="so-company">Company Name <span class="req">*</span></label>
+            <select id="so-company" required disabled><option value="">— Search OAT First —</option></select>
+          </div>
+          <div class="field-group" id="sogrp-rep">
+            <label for="so-rep">Company Representative Name <span class="req">*</span></label>
+            <select id="so-rep" required disabled><option value="">— Select Company First —</option></select>
+          </div>
+          <div class="field-group" id="sogrp-email">
+            <label for="so-email">Email <span class="req">*</span></label>
+            <input type="text" id="so-email" readonly />
+          </div>
+          <div class="field-group" id="sogrp-mobile">
+            <label for="so-mobile">Mobile (10 digits) <span class="req">*</span></label>
+            <input type="text" id="so-mobile" readonly />
+          </div>
+          <div class="field-group" id="sogrp-date">
+            <label for="so-date">Date of Materials Installed <span class="req">*</span></label>
+            <input type="date" id="so-date" required disabled />
+          </div>
+          <div class="field-group" id="sogrp-status">
+            <label for="so-status">Status <span class="req">*</span></label>
+            <select id="so-status" required disabled>
+              <option value="">— Select Status —</option>
+              <option value="ONT Replaced">ONT Replaced</option>
+              <option value="ONT & PSU Replaced">ONT &amp; PSU Replaced</option>
+              <option value="ONT installed - not commissioned - no network signal">ONT installed - not commissioned - no network signal</option>
+              <option value="ONT / PSU Replaced &amp; Madison Box Installed">ONT / PSU Replaced &amp; Madison Box Installed</option>
+              <option value="ONT External - No Access - Missed Appt Card Left">ONT External - No Access - Missed Appt Card Left</option>
+              <option value="ONT Internal - No Access - Missed Appt Card Left">ONT Internal - No Access - Missed Appt Card Left</option>
+            </select>
+          </div>
+          <div class="field-group full" id="sogrp-techComments">
+            <label for="so-techComments">Tech Comments</label>
+            <textarea id="so-techComments" rows="3" placeholder="Optional notes about the job…" disabled></textarea>
+          </div>
+        </div>
+        <div class="section-divider" id="so-materials-divider" style="display:none;"><div class="divider-line"></div><span class="divider-label">Materials Used Today</span><div class="divider-line"></div></div>
+        <div class="notice-box" id="so-notice">Select a Company Representative above to load their on-hand inventory.</div>
+        <div class="notice-box" id="so-noAccessNotice" style="display:none;">No site access on this visit — this job will be recorded with 0 materials used.</div>
+        <div class="subsections" id="so-subsections"></div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <div id="so-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
+          <button type="submit" class="btn btn-submit" id="so-submitBtn">Submit ONT Swapout</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══ STOCK TRANSFER ══ -->
+  <div class="form-panel" id="panel-stock-transfer">
+    <div class="panel-title">Stock Transfer</div>
+    <div class="panel-subtitle">Move stock between a representative and their subcontractor's sub-warehouse (or between two representatives at the same company).</div>
+    <div class="form-wrapper">
+      <div class="success-banner" id="st-success"></div>
+      <form id="formStockTransfer" novalidate>
+        <div class="field-grid" style="margin-bottom:1.25rem;">
+          <div class="field-group full" id="stgrp-company">
+            <label for="st-company">Company Name <span class="req">*</span></label>
+            <select id="st-company" required><option value="">— Select Company —</option></select>
+          </div>
+          <div class="field-group" id="stgrp-fromRep">
+            <label for="st-fromRep">Transfer From <span class="req">*</span></label>
+            <select id="st-fromRep" required disabled><option value="">— Select Company First —</option></select>
+          </div>
+          <div class="field-group" id="stgrp-toRep">
+            <label for="st-toRep">Transfer To <span class="req">*</span></label>
+            <select id="st-toRep" required disabled><option value="">— Select Company First —</option></select>
+          </div>
+          <div class="field-group" id="stgrp-date">
+            <label for="st-date">Date <span class="req">*</span></label>
+            <input type="date" id="st-date" required />
+          </div>
+        </div>
+        <div class="section-divider"><div class="divider-line"></div><span class="divider-label">Materials to Transfer</span><div class="divider-line"></div></div>
+        <div class="notice-box" id="st-notice">Select who the stock is transferring from above to load their on-hand inventory.</div>
+        <div class="subsections" id="st-subsections"></div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
+          <div id="st-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
+          <button type="submit" class="btn btn-submit" id="st-submitBtn">Submit Stock Transfer</button>
         </div>
       </form>
     </div>
@@ -617,6 +734,10 @@ const TBL = {
   opticommWarehouses:      'tblNZyRwHcwMAeKfi',
   subcontractorStockReport:'tblAkiFxWxDYV2Alm',
   subcontractorJobReport:  'tbl5pCmx7a4tpNCNk',
+  ontAddressList:          'tblxXTrspChtUgHT9',
+  ontSwapout:              'tbl5S4jtijQlJTQlq',
+  stockTransfer:           'tblm6SknGDkBLHfjX',
+  stockTransferLines:      'tblHs5VVZWZXrpRwE',
 };
 
 // Field IDs for key write fields
@@ -685,6 +806,45 @@ const FLD = {
   mu_mobile:    'fldMzcCEAzo92W1Wx',
   mu_date:      'fldtSi37Fokls6K4O',
   mu_lineCount: 'fldzpeGI8LCVazURo',
+
+  // ONT Address List (daily OAT lookup — synced from SharePoint "Master - All Bookings" / "Address List")
+  ont_status:        'fld5iBN9ErYeUbHsV',
+  ont_techComments:  'fldNOo6CGhDr80xyM',
+  ont_dateCompleted: 'fldouwxXINdUEXeGz',
+
+  // ONT Swapout — parent record write fields
+  os_oatJobCode:    'fldqDLQxVpa2kSce3',
+  os_company:       'fldFGWYerRJoUzMJG',
+  os_rep:           'fldxNf1afDIGQvrEd',
+  os_email:         'fldhhhfsaY6yP3xTA',
+  os_mobile:        'fldMwI1zKFaK7XBx1',
+  os_date:          'fldy1ghKWPfKZr051',
+  os_lineCount:     'fldvawp7ADw30bm00',
+  os_submissionKey: 'fldKC4PMZtj2pT06P',
+
+  // Materials Used Lines — link back to ONT Swapout (parallel to the existing "Used" link to Materials Used)
+  mul_ontSwapout: 'fldxG0d7PK4qta3fU',
+
+  // Subcontractor Job Report — distinguishes BAU vs ONT Swapout submissions
+  sjr_program: 'fldohdEoQmNrgnJNx',
+
+  // Representatives — flags a record as a sub-warehouse rather than a person
+  rep_isSubWarehouse: 'fldKjbjj5e2E7rGWI',
+
+  // Stock Transfer — parent record write fields
+  st_fromRep:       'fldXvPE9eWGom8sYp',
+  st_toRep:         'fldSziZ0GAYRbZIxq',
+  st_date:          'fldjUfxU7Tt1i1oU9',
+  st_lineCount:     'fldsJOQTLwSf4gHe1',
+  st_submissionKey: 'fldfvUG1hxTD8qkCS',
+
+  // Stock Transfer Lines
+  stl_stockTransfer:   'fld5z7VBY2FkVNsS6',
+  stl_material:        'fldtQBRfqrVxBaDSr',
+  stl_qty:             'fld5gufSIp9sv5QMn',
+  stl_dateTransferred: 'fldICtO9s57KkkraS',
+  stl_fromSSR:         'fld0SNDOoYAZGxFZv',
+  stl_toSSR:           'fldCQLPV5t82egRNO',
   // Contractor Stock Returns
   csr_representative: 'fldwiavGi0lJYyeJd',
   csr_material:       'fldLp0oetAYHnVbg0',
@@ -708,6 +868,19 @@ const FLD = {
   // SSR contractor returns link
   ssr_contractorReturns: 'fldkDCT4Z6pu9JXYC',
 };
+
+// ONT Swapout — statuses that require materials to be logged vs. statuses
+// where no site access means 0 materials used.
+const SO_INSTALL_STATUSES = new Set([
+  'ONT Replaced',
+  'ONT & PSU Replaced',
+  'ONT installed - not commissioned - no network signal',
+  'ONT / PSU Replaced & Madison Box Installed',
+]);
+const SO_NOACCESS_STATUSES = new Set([
+  'ONT External - No Access - Missed Appt Card Left',
+  'ONT Internal - No Access - Missed Appt Card Left',
+]);
 
 const TYPE_ORDER = ['Access Communications','Commscope Direct Delivery','Commscope Lead in Assemblies','Corning Velocity Lead in Assemblies','INFOCUS/EPSILON','Opticomm Warehouse','Prysmian/4Cabling'];
 
@@ -1370,7 +1543,7 @@ async function initData() {
       }),
       atFetchAll(TBL.representatives, { 
         filterByFormula: '{Active}=TRUE()', 
-        fields: ['Full Name','Company','Company Name (from Company)','Email','Mobile'],
+        fields: ['Full Name','Company','Company Name (from Company)','Email','Mobile','Is Sub-Warehouse'],
         view: 'Grid view'           // ← Add this
       }),
       atFetchAll(TBL.materialsQuantities, { 
@@ -1454,9 +1627,9 @@ function populateAllDropdowns() {
   // State dropdowns
   ['inv-state','wf-state'].forEach(id => buildStateDropdown(document.getElementById(id)));
   // Company dropdowns
-  ['wf-company','dm-company'].forEach(id => buildCompanyDropdown(document.getElementById(id)));
+  ['wf-company','dm-company','so-company','st-company'].forEach(id => buildCompanyDropdown(document.getElementById(id)));
   // Set today's date
-  ['inv-date','dm-date'].forEach(id => { const el = document.getElementById(id); if(el) el.value = todayStr(); });
+  ['inv-date','dm-date','so-date','st-date'].forEach(id => { const el = document.getElementById(id); if(el) el.value = todayStr(); });
   // Contractor Return dropdowns
   buildCompanyDropdown(document.getElementById('cr-company'));
   buildStateDropdown(document.getElementById('cr-wh-state'));
@@ -1508,7 +1681,7 @@ function buildCompanyDropdown(sel) {
   });
 }
 
-function buildRepDropdown(repSel, companyRecId, emailEl, mobileEl) {
+function buildRepDropdown(repSel, companyRecId, emailEl, mobileEl, includeSubWarehouses = false) {
   if (!repSel) return;
   repSel.innerHTML = '';
   if (!companyRecId) {
@@ -1520,14 +1693,18 @@ function buildRepDropdown(repSel, companyRecId, emailEl, mobileEl) {
   }
   const def = document.createElement('option'); def.value = ''; def.textContent = '— Select Representative —';
   repSel.appendChild(def);
-  (CACHE.repsByCompanyId[companyRecId] || []).forEach(r => {
-    const opt = document.createElement('option');
-    opt.value = r.id;
-    opt.textContent = r.fields['Full Name'];
-    opt.dataset.email  = r.fields['Email']  || '';
-    opt.dataset.mobile = r.fields['Mobile'] || '';
-    repSel.appendChild(opt);
-  });
+  (CACHE.repsByCompanyId[companyRecId] || [])
+    .filter(r => includeSubWarehouses || !r.fields['Is Sub-Warehouse'])
+    .forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      const isSubWarehouse = !!r.fields['Is Sub-Warehouse'];
+      opt.textContent = isSubWarehouse ? `🏬 ${r.fields['Full Name']} (Sub-Warehouse)` : r.fields['Full Name'];
+      opt.dataset.email  = r.fields['Email']  || '';
+      opt.dataset.mobile = r.fields['Mobile'] || '';
+      opt.dataset.isSubWarehouse = isSubWarehouse ? '1' : '';
+      repSel.appendChild(opt);
+    });
   repSel.disabled = false;
   if (emailEl) emailEl.value = '';
   if (mobileEl) mobileEl.value = '';
@@ -1770,7 +1947,7 @@ function goBack() {
     buildStateDropdown(document.getElementById('wf-state'));
     buildLocationDropdown(document.getElementById('wf-location'), '');
     buildCompanyDropdown(document.getElementById('wf-company'));
-    buildRepDropdown(document.getElementById('wf-rep'), '', document.getElementById('wf-email'), document.getElementById('wf-mobile'));
+    buildRepDropdown(document.getElementById('wf-rep'), '', document.getElementById('wf-email'), document.getElementById('wf-mobile'), true);
     document.getElementById('wf-subsections').innerHTML = '';
     document.getElementById('wf-notice').style.display = 'block';
     document.getElementById('wfgrp-dateColl').style.display = 'none';
@@ -1794,12 +1971,24 @@ function goBack() {
     hidePatience('dm', 'Submit Daily Record');
   } catch(e) {}
 
+  // Reset ONT Swapout
+  try {
+    soFullReset();
+    hidePatience('so', 'Submit ONT Swapout');
+  } catch(e) {}
+
+  // Reset Stock Transfer
+  try {
+    stFullReset();
+    hidePatience('st', 'Submit Stock Transfer');
+  } catch(e) {}
+
   // Reset Contractor Stock Return
   try {
     document.getElementById('formContractorReturn').reset();
     document.getElementById('cr-date').value = todayStr();
     buildCompanyDropdown(document.getElementById('cr-company'));
-    buildRepDropdown(document.getElementById('cr-rep'), '', null, null);
+    buildRepDropdown(document.getElementById('cr-rep'), '', null, null, true);
     document.getElementById('cr-subsections').innerHTML = '';
     document.getElementById('cr-notice').style.display = 'block';
     buildStateDropdown(document.getElementById('cr-wh-state'));
@@ -2010,7 +2199,7 @@ let wfFoundRecId = null;
   notice.style.display = 'block';
 
   compEl.addEventListener('change', function() {
-    buildRepDropdown(repEl, this.value, emailEl, mobileEl);
+    buildRepDropdown(repEl, this.value, emailEl, mobileEl, true);
   });
   repEl.addEventListener('change', function() {
     fillRepContact(this, emailEl, mobileEl);
@@ -2519,7 +2708,7 @@ let wfFoundRecId = null;
       wfMode = 'new'; wfFoundRecId = null; wfCancelMode = false;
       buildStateDropdown(document.getElementById('wf-state'));
       buildCompanyDropdown(compEl);
-      buildRepDropdown(repEl, '', emailEl, mobileEl);
+      buildRepDropdown(repEl, '', emailEl, mobileEl, true);
       buildLocationDropdown(document.getElementById('wf-location'), '');
       document.getElementById('wf-subsections').innerHTML = '';
       document.getElementById('wf-searchStatus').style.display = 'none';
@@ -2663,7 +2852,7 @@ async function wfSearch() {
     if (compIds[0]) {
       document.getElementById('wf-company').value = compIds[0];
       buildRepDropdown(document.getElementById('wf-rep'), compIds[0],
-        document.getElementById('wf-email'), document.getElementById('wf-mobile'));
+        document.getElementById('wf-email'), document.getElementById('wf-mobile'), true);
     }
 
     // Set Representative
@@ -2930,6 +3119,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
           const sjrFields = {
             'fldOsnJEHcWjfe7fV': [repRecId],
             'fldkCo5VFj09XALYv': [item.lineId],
+            [FLD.sjr_program]:  'BAU',
           };
           if (item.note) sjrFields['Note'] = item.note; // referenced by name, no field ID needed
           await atCreate(TBL.subcontractorJobReport, sjrFields, 1); // retries=1: no retry — prevents duplicates on network timeout
@@ -3095,8 +3285,749 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
 });
 })();
 
-async function loadRepInventory(repRecId, repName) {
-  const container = document.getElementById('dm-subsections');
+// ═══════════════════════════════════════════════════
+//  ONT SWAPOUT
+// ═══════════════════════════════════════════════════
+// ── OAT search logic ──────────────────────────────────
+// The OAT field is a lookup against the ONT Address List table (synced daily
+// from SharePoint "Master - All Bookings" / "Address List"). A successful
+// Search unlocks the rest of the form; editing the suffix afterwards
+// invalidates the found record and re-locks the form.
+(function() {
+  const suffix = document.getElementById('so-jobcode-suffix');
+  const wrap   = document.getElementById('so-jobcode-wrap');
+
+  suffix.addEventListener('input', function() {
+    this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
+    if (document.getElementById('so-ontRecId').value) {
+      // Job code changed after a successful search — require re-search
+      document.getElementById('so-ontRecId').value = '';
+      document.getElementById('so-jobcode').value = '';
+      document.getElementById('sogrp-address').style.display = 'none';
+      document.getElementById('so-address').value = '';
+      document.getElementById('so-searchStatus').style.display = 'none';
+      soLockPostSearchFields();
+    }
+  });
+  suffix.addEventListener('focus', () => {
+    wrap.style.borderColor = 'var(--primary-accent)';
+    wrap.style.boxShadow = '0 0 0 3px var(--accent-10)';
+  });
+  suffix.addEventListener('blur', () => {
+    wrap.style.borderColor = 'var(--dark-20)';
+    wrap.style.boxShadow = '';
+  });
+})();
+
+function soLockPostSearchFields() {
+  ['so-company','so-date','so-status','so-techComments'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = true;
+  });
+  document.getElementById('so-company').value = '';
+  buildRepDropdown(document.getElementById('so-rep'), '', document.getElementById('so-email'), document.getElementById('so-mobile'));
+  document.getElementById('so-rep').disabled = true;
+  document.getElementById('so-status').value = '';
+  document.getElementById('so-techComments').value = '';
+  document.getElementById('so-subsections').innerHTML = '';
+  document.getElementById('so-notice').style.display = 'none';
+  document.getElementById('so-noAccessNotice').style.display = 'none';
+  document.getElementById('so-materials-divider').style.display = 'none';
+}
+
+function soUnlockPostSearchFields() {
+  ['so-company','so-date','so-status','so-techComments'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+}
+
+// Show/hide the Materials Used section and pull rep inventory based on Status
+function soHandleStatusChange() {
+  const status  = document.getElementById('so-status').value;
+  const divider = document.getElementById('so-materials-divider');
+  const notice  = document.getElementById('so-notice');
+  const noAccess= document.getElementById('so-noAccessNotice');
+  const repEl   = document.getElementById('so-rep');
+
+  if (SO_INSTALL_STATUSES.has(status)) {
+    noAccess.style.display = 'none';
+    if (repEl.value) {
+      divider.style.display = '';
+      notice.style.display = 'none';
+      const repName = repEl.options[repEl.selectedIndex]?.textContent?.trim() || '';
+      loadRepInventory(repEl.value, repName, 'so-subsections', 'so');
+    } else {
+      divider.style.display = '';
+      notice.style.display = 'block';
+      document.getElementById('so-subsections').innerHTML = '';
+    }
+  } else if (SO_NOACCESS_STATUSES.has(status)) {
+    divider.style.display = 'none';
+    notice.style.display = 'none';
+    document.getElementById('so-subsections').innerHTML = '';
+    noAccess.style.display = 'block';
+  } else {
+    divider.style.display = 'none';
+    notice.style.display = 'none';
+    noAccess.style.display = 'none';
+    document.getElementById('so-subsections').innerHTML = '';
+  }
+}
+
+async function soSearchOAT() {
+  const suffixEl = document.getElementById('so-jobcode-suffix');
+  const suffix   = suffixEl.value.trim();
+  const banner   = document.getElementById('so-searchStatus');
+  const fullJobCode = 'OAT000000' + suffix;
+
+  if (suffix.length !== 6) {
+    showBanner(banner, 'error', 'Enter the 6-digit OAT number before searching.');
+    return;
+  }
+
+  showBanner(banner, 'found', '🔍 Searching…');
+  try {
+    const recs = await atSearchByFormula(TBL.ontAddressList, `{Job Code}="${fullJobCode}"`);
+
+    if (!recs.length) {
+      showBanner(banner, 'not-found', `"${fullJobCode}" wasn't found in today's OAT list. Double-check the number, or try again shortly if it was booked recently.`);
+      document.getElementById('so-jobcode').value = '';
+      document.getElementById('so-ontRecId').value = '';
+      document.getElementById('sogrp-address').style.display = 'none';
+      soLockPostSearchFields();
+      return;
+    }
+
+    const rec = recs[0];
+    const f = rec.fields;
+    document.getElementById('so-jobcode').value = fullJobCode;
+    document.getElementById('so-ontRecId').value = rec.id;
+
+    const address = f['Address'] || '';
+    document.getElementById('so-address').value = address;
+    document.getElementById('sogrp-address').style.display = '';
+    showBanner(banner, 'found', address ? `✔ Found — ${address}` : '✔ Job code found.');
+
+    // Pre-fill Status / Tech Comments in case this job was already submitted
+    // before (e.g. reopened later to close out).
+    document.getElementById('so-status').value = f['Status'] || '';
+    document.getElementById('so-techComments').value = f['Tech Comments'] || '';
+
+    soUnlockPostSearchFields();
+    soHandleStatusChange();
+  } catch(err) {
+    console.error('soSearchOAT error:', err);
+    showBanner(banner, 'error', 'Search failed: ' + err.message);
+    soLockPostSearchFields();
+  }
+}
+
+// Full reset of the ONT Swapout form, including OAT search state. Shared by:
+// successful submit, offline-queued submit, and the global "Back"/nav reset.
+function soFullReset() {
+  document.getElementById('formONTSwapout').reset();
+  document.getElementById('so-date').value = todayStr();
+  document.getElementById('so-jobcode').value = '';
+  document.getElementById('so-jobcode-suffix').value = '';
+  document.getElementById('so-ontRecId').value = '';
+  document.getElementById('so-address').value = '';
+  document.getElementById('sogrp-address').style.display = 'none';
+  document.getElementById('so-searchStatus').style.display = 'none';
+  document.getElementById('so-status').value = '';
+  document.getElementById('so-techComments').value = '';
+  buildCompanyDropdown(document.getElementById('so-company'));
+  buildRepDropdown(document.getElementById('so-rep'), '', document.getElementById('so-email'), document.getElementById('so-mobile'));
+  soLockPostSearchFields();
+}
+
+(function() {
+  const compEl   = document.getElementById('so-company');
+  const repEl    = document.getElementById('so-rep');
+  const emailEl  = document.getElementById('so-email');
+  const mobileEl = document.getElementById('so-mobile');
+  const statusEl = document.getElementById('so-status');
+
+  compEl.addEventListener('change', function() {
+    buildRepDropdown(repEl, this.value, emailEl, mobileEl);
+    document.getElementById('so-subsections').innerHTML = '';
+    soHandleStatusChange();
+  });
+  repEl.addEventListener('change', function() {
+    fillRepContact(this, emailEl, mobileEl);
+    soHandleStatusChange();
+  });
+  statusEl.addEventListener('change', soHandleStatusChange);
+
+  // Pure submission logic — no DOM access, so it can be re-run later from the
+  // offline queue exactly as it would have run live. soKey is generated once at
+  // submit time and carried in the payload, so a retry after a partial failure
+  // finds the existing record via Submission Key instead of duplicating it.
+  //
+  // Line items are created in the SAME Materials Used Lines table Daily
+  // Materials Used uses (linked via the "ONT Swapout" field instead of "Used"),
+  // so the existing SSR "Current Stock On-Hand" rollup and the existing SJR
+  // lookups keep working unmodified for both programs — no duplicated schema.
+  async function submitONTSwapout(payload) {
+    const { repRecId, usedItems, ontRecId, fullJobCode, soDate, soKey, statusVal, techComments } = payload;
+
+    // 0. Update the ONT Address List record with this visit's outcome. A PATCH
+    //    is naturally idempotent, so this is safe to replay from the offline
+    //    queue without a dedupe key — re-running just re-applies the same
+    //    values. Re-searching the same OAT later (e.g. to close out a job)
+    //    overwrites these fields again, as intended.
+    if (ontRecId) {
+      await atUpdate(TBL.ontAddressList, ontRecId, {
+        [FLD.ont_status]:        statusVal,
+        [FLD.ont_techComments]:  techComments,
+        [FLD.ont_dateCompleted]: soDate,
+      });
+    }
+
+    // 1. Create the main ONT Swapout record (idempotent)
+    let swapoutId;
+    let existingMulLineIds = [];
+    const soExisting = await atFetchAll(TBL.ontSwapout, {
+      filterByFormula: `{Submission Key}="${soKey}"`,
+      fields: ['Submission Key', 'Swapout Line Items'],
+    });
+    if (soExisting.length > 0) {
+      swapoutId = soExisting[0].id;
+      existingMulLineIds = (soExisting[0].fields['Swapout Line Items'] || []).map(r => r && r.id ? r.id : r);
+      console.log('ONT Swapout: existing record found, skipping create:', swapoutId);
+    } else {
+      const newSwapoutRecord = await atCreate(TBL.ontSwapout, {
+        [FLD.os_oatJobCode]:    ontRecId ? [ontRecId] : [],
+        [FLD.os_company]:      [repRecId],
+        [FLD.os_rep]:          [repRecId],
+        [FLD.os_email]:        [repRecId],
+        [FLD.os_mobile]:       [repRecId],
+        [FLD.os_date]:         soDate,
+        [FLD.os_lineCount]:    usedItems.length,
+        [FLD.os_submissionKey]:soKey,
+      });
+      swapoutId = newSwapoutRecord.id;
+    }
+
+    // 2. Batch-create MUL line items (up to 10 per API call) — skip any that
+    //    already exist for this Submission Key, in case a prior attempt partly succeeded.
+    console.log(`Creating ${usedItems.length} usage line items...`);
+    let createdUsedLineIds = [];
+    let remainingItems = usedItems;
+    if (existingMulLineIds.length > 0) {
+      const idFormula = 'OR(' + existingMulLineIds.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
+      const existingMulRows = await atFetchAll(TBL.materialsUsedLines, {
+        filterByFormula: idFormula,
+        fields: ['Material', 'Qty Used', 'Note'],
+      }).catch(() => []);
+      const alreadyCreatedMatIds = new Set(
+        existingMulRows.map(r => (r.fields['Material'] || [])[0]).filter(Boolean)
+      );
+      createdUsedLineIds = existingMulRows.map(r => ({
+        lineId: r.id, recId: (r.fields['Material'] || [])[0], qty: r.fields['Qty Used'] || 0,
+        note: r.fields['Note'] || '',
+      }));
+      remainingItems = usedItems.filter(item => !alreadyCreatedMatIds.has(item.recId));
+    }
+    const mulBatchFields = remainingItems.map(item => {
+      const fields = {
+        [FLD.mul_ontSwapout]: [swapoutId],
+        'fld0u8aUHdRsSIJLm':  [item.recId],
+        'fldGV26CqV55FYGv6':  item.qty,
+        'flduIFkorq5wVuNNz':  soDate,
+      };
+      if (item.note) fields['Note'] = item.note; // qty > 1 only — referenced by name, no field ID needed
+      return fields;
+    });
+    for (let i = 0; i < mulBatchFields.length; i += 10) {
+      const chunk = mulBatchFields.slice(i, i + 10);
+      const created = await atCreateBatch(TBL.materialsUsedLines, chunk);
+      created.forEach((rec, idx) => {
+        createdUsedLineIds.push({
+          lineId: rec.id, recId: remainingItems[i + idx].recId, qty: remainingItems[i + idx].qty,
+          note: remainingItems[i + idx].note || '',
+        });
+        console.log(`✅ MUL created (ONT Swapout): ${rec.id}`);
+      });
+    }
+
+    // 3+4. Fetch SSR once, group MUL lines by SSR row, then update/create SSR + SJR all in parallel
+    // — identical logic to Daily Materials Used, since both programs share the
+    // same rep on-hand stock pool via the same Materials Used Lines table.
+    const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
+      fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
+      returnFieldsByFieldId: true,
+    });
+
+    const ssrUpdates = {};
+    const ssrCreates = [];
+
+    createdUsedLineIds.forEach(item => {
+      const ssrMatch = allSsrRows.find(row => {
+        const repLookup = row.fields['fldTqTbr6ysQAimLX'] || [];
+        const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
+        return repLookup.includes(repRecId) && matLinked.includes(item.recId);
+      });
+      if (ssrMatch) {
+        if (!ssrUpdates[ssrMatch.id]) {
+          ssrUpdates[ssrMatch.id] = {
+            existingIds: (ssrMatch.fields['fldozoAjUrm312vj9'] || []).map(r => r && r.id ? r.id : r),
+            newLineIds: [],
+          };
+        }
+        if (!ssrUpdates[ssrMatch.id].existingIds.includes(item.lineId) &&
+            !ssrUpdates[ssrMatch.id].newLineIds.includes(item.lineId)) {
+          ssrUpdates[ssrMatch.id].newLineIds.push(item.lineId);
+        }
+      } else {
+        const existing = ssrCreates.find(c => c.matRecId === item.recId);
+        if (existing) {
+          existing.lineIds.push(item.lineId);
+        } else {
+          ssrCreates.push({ matRecId: item.recId, lineIds: [item.lineId] });
+        }
+      }
+    });
+
+    const ssrUpdateEntries = Object.entries(ssrUpdates);
+    for (let i = 0; i < ssrUpdateEntries.length; i += 4) {
+      await Promise.all(ssrUpdateEntries.slice(i, i + 4).map(([ssrId, { existingIds, newLineIds }]) =>
+        atUpdate(TBL.subcontractorStockReport, ssrId, {
+          'fldozoAjUrm312vj9': [...existingIds, ...newLineIds],
+        }).catch(err => console.warn('SSR update failed:', err.message))
+      ));
+    }
+    for (let i = 0; i < ssrCreates.length; i += 4) {
+      await Promise.all(ssrCreates.slice(i, i + 4).map(({ matRecId, lineIds }) =>
+        atCreate(TBL.subcontractorStockReport, {
+          'fldV1yEmErUzd4oFw': [repRecId],
+          'fldXm5gW03QOzBE1P': [matRecId],
+          'fldozoAjUrm312vj9': lineIds,
+        }).catch(err => console.warn('SSR create failed:', err.message))
+      ));
+    }
+
+    const existingSjrRows = await atListRecords(TBL.subcontractorJobReport, {
+      fields: ['fldkCo5VFj09XALYv'], // Materials Used Line
+      returnFieldsByFieldId: true,
+    }).catch(() => []);
+    const mulIdsWithSjr = new Set();
+    existingSjrRows.forEach(row => {
+      (row.fields['fldkCo5VFj09XALYv'] || []).forEach(r => mulIdsWithSjr.add(r && r.id ? r.id : r));
+    });
+    const sjrPendingItems = createdUsedLineIds.filter(item => !mulIdsWithSjr.has(item.lineId));
+    for (let i = 0; i < sjrPendingItems.length; i += 4) {
+      await Promise.all(sjrPendingItems.slice(i, i + 4).map(async item => {
+        try {
+          const sjrFields = {
+            'fldOsnJEHcWjfe7fV': [repRecId],
+            'fldkCo5VFj09XALYv': [item.lineId],
+            [FLD.sjr_program]:  'ONT Swapout',
+          };
+          if (item.note) sjrFields['Note'] = item.note;
+          await atCreate(TBL.subcontractorJobReport, sjrFields, 1);
+        } catch(err) { console.warn('SJR create failed:', err.message); }
+      }));
+    }
+    console.log(`✅ ONT Swapout SSR: ${ssrUpdateEntries.length} updated, ${ssrCreates.length} created. SJR: ${createdUsedLineIds.length} total (${sjrPendingItems.length} newly created).`);
+
+    // Build the SJR Excel payload — 'program' is included for the downstream
+    // report; the Power Automate flow will need a matching column mapped for
+    // it to land in Excel, same as the new report you're building later.
+    const sjrRepRec = CACHE.representatives.find(r => r.id === repRecId);
+    const cn = sjrRepRec?.fields?.['Company Name (from Company)'];
+    const sjrCompanyName = (Array.isArray(cn) ? cn[0] : cn) || '';
+    const sjrFullName = sjrRepRec?.fields?.['Full Name'] || '';
+    const sjrEmail    = sjrRepRec?.fields?.['Email'] || '';
+    const sjrMobile   = sjrRepRec?.fields?.['Mobile'] || '';
+
+    const sjrExcelPayload = createdUsedLineIds.map(item => {
+      const mat = CACHE.materials.find(r => r.id === item.recId);
+      const inventoryCode = mat?.fields?.['Inventory Code'] || '';
+      return {
+        reportKey:     `${sjrCompanyName} - ${sjrFullName} | ${inventoryCode} | ${fullJobCode}`,
+        dateInstalled: soDate,
+        jobCode:       fullJobCode,
+        companyName:   sjrCompanyName,
+        fullName:      sjrFullName,
+        email:         sjrEmail,
+        mobile:        sjrMobile,
+        inventoryCode,
+        opCode:        mat?.fields?.['OP Code'] || '',
+        itCode:        mat?.fields?.['IT Code'] || '',
+        description:   mat?.fields?.['Description'] || '',
+        qtyUsed:       item.qty || 0,
+        note:          item.note || '',
+        program:       'ONT Swapout',
+      };
+    });
+
+    (async () => {
+      await new Promise(r => setTimeout(r, 20000));
+      try {
+        const ssrOk = await sendSSRBatchToPA(repRecId);
+        const sjrOk = await sendSJRBatchToPA(sjrExcelPayload);
+        if (!ssrOk || !sjrOk) throw new Error('Excel sync returned a failure status');
+      } catch (webhookErr) {
+        console.warn('Excel sync failed after ONT Swapout submission — queuing for retry:', webhookErr.message);
+        try {
+          await queueAdd('ontSwapoutWebhookRetry', { repRecId, sjrExcelPayload }, `ONT Swapout — Excel sync retry (${fullJobCode})`);
+          updateQueueBadge();
+          requestBackgroundSync();
+        } catch (qErr) {
+          console.error('Could not queue Excel sync retry either — this one is genuinely lost:', qErr.message);
+        }
+      }
+    })();
+  }
+  registerQueueReplayer('ontSwapout', submitONTSwapout);
+
+  registerQueueReplayer('ontSwapoutWebhookRetry', async (payload) => {
+    const { repRecId, sjrExcelPayload } = payload;
+    const ssrOk = await sendSSRBatchToPA(repRecId);
+    const sjrOk = await sendSJRBatchToPA(sjrExcelPayload);
+    if (!ssrOk || !sjrOk) throw new Error('Excel sync retry failed');
+  });
+
+  document.getElementById('formONTSwapout').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    if (!document.getElementById('so-ontRecId').value) {
+      document.getElementById('sogrp-jobcode').classList.add('field-error');
+      alert('Please search for and confirm the OAT number before submitting.');
+      return;
+    }
+    document.getElementById('sogrp-jobcode').classList.remove('field-error');
+    let ok = true;
+    if (!validateSel('so-company', 'sogrp-company')) ok = false;
+    if (!validateSel('so-rep',     'sogrp-rep'))     ok = false;
+    if (!validateTxt('so-jobcode', 'sogrp-jobcode')) ok = false;
+    if (!validateTxt('so-date',    'sogrp-date'))    ok = false;
+    if (!validateSel('so-status',  'sogrp-status'))  ok = false;
+    if (!ok) { alert('Please complete all required fields.'); return; }
+    if (document.querySelectorAll('.so-used.qty-over').length > 0) {
+      alert('One or more quantities exceed on-hand stock.'); return;
+    }
+    let missingNote = false;
+    document.querySelectorAll('.so-used').forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      const noteSel = inp.closest('tr')?.querySelector('.so-note');
+      if (qty > 1 && noteSel && !noteSel.value) {
+        noteSel.classList.add('qty-over');
+        missingNote = true;
+      }
+    });
+    if (missingNote) {
+      alert('Please select a Note for any item with a quantity used greater than 1.');
+      return;
+    }
+    showPatience('so');
+
+    const btn = document.getElementById('so-submitBtn');
+    btnLoading(btn);
+
+    const repRecId  = document.getElementById('so-rep').value;
+    const usedItems = [];
+    document.querySelectorAll('.so-used').forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      if (qty > 0) {
+        const item = { recId: inp.dataset.record, qty };
+        if (qty > 1) {
+          const noteSel = inp.closest('tr')?.querySelector('.so-note');
+          item.note = noteSel ? noteSel.value : '';
+        }
+        usedItems.push(item);
+      }
+    });
+    const fullJobCode  = document.getElementById('so-jobcode').value.trim();
+    const ontRecId     = document.getElementById('so-ontRecId').value;
+    const statusVal    = document.getElementById('so-status').value;
+    const techComments = document.getElementById('so-techComments').value.trim();
+    const soDate = document.getElementById('so-date').value;
+    const soKey = crypto.randomUUID();
+    const payload = { repRecId, usedItems, ontRecId, fullJobCode, soDate, soKey, statusVal, techComments };
+
+    try {
+      await submitONTSwapout(payload);
+      showSuccess('so-success', `✔ ONT Swapout submitted successfully (${usedItems.length} items). Returning to home screen…`);
+      soFullReset();
+      setTimeout(() => goBack(), 3000);
+
+    } catch(err) {
+      if (isNetworkError(err)) {
+        try {
+          await queueAdd('ontSwapout', payload, `ONT Swapout — ${usedItems.length} item(s) — ${fullJobCode}`);
+          updateQueueBadge();
+          requestBackgroundSync();
+          showSuccess('so-success', `📴 No connection — saved offline. ${usedItems.length} item(s) will sync automatically once reception returns.`);
+          soFullReset();
+          setTimeout(() => goBack(), 3000);
+        } catch(queueErr) {
+          alert('Submission failed and could not be saved offline: ' + queueErr.message);
+          console.error(queueErr);
+          btnReset(btn, 'Submit ONT Swapout');
+        }
+      } else {
+        alert('Submission failed: ' + err.message);
+        console.error(err);
+        btnReset(btn, 'Submit ONT Swapout');
+      }
+    }
+  });
+})();
+
+// ═══════════════════════════════════════════════════
+//  STOCK TRANSFER
+// ═══════════════════════════════════════════════════
+// A sub-warehouse is just a Representatives record with Is Sub-Warehouse
+// checked, so this form (and its dropdowns) work identically whether either
+// side is a real field rep or a subcontractor's sub-warehouse — the same
+// stock pool (Subcontractor Stock Report) already backs both. Transfers are
+// restricted to the same company on both sides.
+function stApplyMutualExclusion() {
+  const fromSel = document.getElementById('st-fromRep');
+  const toSel   = document.getElementById('st-toRep');
+  Array.from(toSel.options).forEach(opt => {
+    opt.disabled = !!opt.value && opt.value === fromSel.value;
+  });
+  if (toSel.value && toSel.value === fromSel.value) toSel.value = '';
+  Array.from(fromSel.options).forEach(opt => {
+    opt.disabled = !!opt.value && opt.value === toSel.value;
+  });
+  if (fromSel.value && fromSel.value === toSel.value) fromSel.value = '';
+}
+
+function stFullReset() {
+  document.getElementById('formStockTransfer').reset();
+  document.getElementById('st-date').value = todayStr();
+  buildCompanyDropdown(document.getElementById('st-company'));
+  buildRepDropdown(document.getElementById('st-fromRep'), '', null, null, true);
+  buildRepDropdown(document.getElementById('st-toRep'), '', null, null, true);
+  document.getElementById('st-subsections').innerHTML = '';
+  document.getElementById('st-notice').style.display = 'block';
+}
+
+(function() {
+  const compEl    = document.getElementById('st-company');
+  const fromRepEl = document.getElementById('st-fromRep');
+  const toRepEl   = document.getElementById('st-toRep');
+  const notice    = document.getElementById('st-notice');
+  notice.style.display = 'block';
+
+  compEl.addEventListener('change', function() {
+    buildRepDropdown(fromRepEl, this.value, null, null, true);
+    buildRepDropdown(toRepEl, this.value, null, null, true);
+    document.getElementById('st-subsections').innerHTML = '';
+    notice.style.display = 'block';
+  });
+  fromRepEl.addEventListener('change', function() {
+    stApplyMutualExclusion();
+    if (this.value) {
+      notice.style.display = 'none';
+      const fromName = this.options[this.selectedIndex]?.textContent?.trim() || '';
+      loadRepInventory(this.value, fromName, 'st-subsections', 'st', false);
+    } else {
+      document.getElementById('st-subsections').innerHTML = '';
+      notice.style.display = 'block';
+    }
+  });
+  toRepEl.addEventListener('change', stApplyMutualExclusion);
+
+  // Pure submission logic — mirrors the shape of submitDailyMaterialUsed /
+  // submitONTSwapout so it replays identically from the offline queue.
+  async function submitStockTransfer(payload) {
+    const { fromRepId, toRepId, transferItems, transferDate, stKey } = payload;
+
+    // 1. Create/find the Stock Transfer parent record (idempotent via Submission Key)
+    let transferId;
+    let existingLineIds = [];
+    const stExisting = await atFetchAll(TBL.stockTransfer, {
+      filterByFormula: `{Submission Key}="${stKey}"`,
+      fields: ['Submission Key', 'Transfer Lines'],
+    });
+    if (stExisting.length > 0) {
+      transferId = stExisting[0].id;
+      existingLineIds = (stExisting[0].fields['Transfer Lines'] || []).map(r => r && r.id ? r.id : r);
+      console.log('Stock Transfer: existing record found, skipping create:', transferId);
+    } else {
+      const rec = await atCreate(TBL.stockTransfer, {
+        [FLD.st_fromRep]: [fromRepId],
+        [FLD.st_toRep]:   [toRepId],
+        [FLD.st_date]:    transferDate,
+        [FLD.st_lineCount]: transferItems.length,
+        [FLD.st_submissionKey]: stKey,
+      });
+      transferId = rec.id;
+    }
+
+    // 2. Skip any line items already created on a prior, partially-failed attempt
+    let createdLines = [];
+    let remainingItems = transferItems;
+    if (existingLineIds.length > 0) {
+      const idFormula = 'OR(' + existingLineIds.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
+      const existingRows = await atFetchAll(TBL.stockTransferLines, {
+        filterByFormula: idFormula,
+        fields: ['Material', 'Qty Transferred'],
+      }).catch(() => []);
+      const doneMatIds = new Set(existingRows.map(r => (r.fields['Material'] || [])[0]).filter(Boolean));
+      createdLines = existingRows.map(r => ({
+        lineId: r.id, recId: (r.fields['Material'] || [])[0], qty: r.fields['Qty Transferred'] || 0,
+      }));
+      remainingItems = transferItems.filter(item => !doneMatIds.has(item.recId));
+    }
+
+    if (remainingItems.length > 0) {
+      // 3. Resolve the From/To SSR record for every material, creating a new
+      //    To-side SSR row for any material the destination has never held
+      //    before. The From-side row is expected to always already exist —
+      //    the materials table only ever shows items with positive on-hand
+      //    stock, so an SSR row necessarily backs that number.
+      const matIds = [...new Set(remainingItems.map(i => i.recId))];
+      const ssrRows = await atListRecords(TBL.subcontractorStockReport, {
+        fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P'],
+        returnFieldsByFieldId: true,
+      });
+      const findSSR = (repId, matId) => ssrRows.find(row => {
+        const repIds = row.fields['fldTqTbr6ysQAimLX'] || [];
+        const matLinked = (row.fields['fldXm5gW03QOzBE1P'] || []).map(r => r && r.id ? r.id : r);
+        return repIds.includes(repId) && matLinked.includes(matId);
+      });
+
+      const resolvedMap = {};
+      const toCreatesNeeded = [];
+      matIds.forEach(matId => {
+        const fromRow = findSSR(fromRepId, matId);
+        const toRow   = findSSR(toRepId, matId);
+        resolvedMap[matId] = { fromId: fromRow ? fromRow.id : null, toId: toRow ? toRow.id : null };
+        if (!fromRow) console.warn(`No SSR row found for the source + material ${matId} — unexpected, since only on-hand materials are offered for transfer.`);
+        if (!toRow) toCreatesNeeded.push(matId);
+      });
+      for (const matId of toCreatesNeeded) {
+        const rec = await atCreate(TBL.subcontractorStockReport, {
+          'fldV1yEmErUzd4oFw': [toRepId],
+          'fldXm5gW03QOzBE1P': [matId],
+        });
+        resolvedMap[matId].toId = rec.id;
+      }
+
+      // 4. Batch-create the Stock Transfer Lines, linking directly to the
+      //    resolved From/To SSR rows — Airtable's reciprocal linking then
+      //    auto-populates SSR's own Transfer Lines (Sent)/(Received) fields
+      //    and their rollups, so no separate SSR update call is needed.
+      const batchFields = remainingItems.map(item => {
+        const resolved = resolvedMap[item.recId];
+        const fields = {
+          [FLD.stl_stockTransfer]:   [transferId],
+          [FLD.stl_material]:        [item.recId],
+          [FLD.stl_qty]:             item.qty,
+          [FLD.stl_dateTransferred]: transferDate,
+          [FLD.stl_toSSR]:           [resolved.toId],
+        };
+        if (resolved.fromId) fields[FLD.stl_fromSSR] = [resolved.fromId];
+        return fields;
+      });
+      for (let i = 0; i < batchFields.length; i += 10) {
+        const chunk = batchFields.slice(i, i + 10);
+        const created = await atCreateBatch(TBL.stockTransferLines, chunk);
+        created.forEach((rec, idx) => {
+          createdLines.push({ lineId: rec.id, recId: remainingItems[i + idx].recId, qty: remainingItems[i + idx].qty });
+        });
+      }
+    }
+    console.log(`✅ Stock Transfer: ${createdLines.length} line(s) total.`);
+
+    // 5. Push both reps' updated on-hand snapshot to Excel — same pattern as
+    //    the other forms' post-submission sync.
+    (async () => {
+      await new Promise(r => setTimeout(r, 20000));
+      try {
+        const fromOk = await sendSSRBatchToPA(fromRepId);
+        const toOk   = await sendSSRBatchToPA(toRepId);
+        if (!fromOk || !toOk) throw new Error('Excel sync returned a failure status');
+      } catch (webhookErr) {
+        console.warn('Excel sync failed after Stock Transfer — queuing for retry:', webhookErr.message);
+        try {
+          await queueAdd('stockTransferWebhookRetry', { fromRepId, toRepId }, `Stock Transfer — Excel sync retry`);
+          updateQueueBadge();
+          requestBackgroundSync();
+        } catch (qErr) {
+          console.error('Could not queue Excel sync retry either — this one is genuinely lost:', qErr.message);
+        }
+      }
+    })();
+  }
+  registerQueueReplayer('stockTransfer', submitStockTransfer);
+  registerQueueReplayer('stockTransferWebhookRetry', async (payload) => {
+    const { fromRepId, toRepId } = payload;
+    const fromOk = await sendSSRBatchToPA(fromRepId);
+    const toOk   = await sendSSRBatchToPA(toRepId);
+    if (!fromOk || !toOk) throw new Error('Excel sync retry failed');
+  });
+
+  document.getElementById('formStockTransfer').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    let ok = true;
+    if (!validateSel('st-company', 'stgrp-company')) ok = false;
+    if (!validateSel('st-fromRep', 'stgrp-fromRep')) ok = false;
+    if (!validateSel('st-toRep',   'stgrp-toRep'))   ok = false;
+    if (!validateTxt('st-date',    'stgrp-date'))    ok = false;
+    if (!ok) { alert('Please complete all required fields.'); return; }
+    if (document.getElementById('st-fromRep').value === document.getElementById('st-toRep').value) {
+      alert('Transfer From and Transfer To must be different.'); return;
+    }
+    if (document.querySelectorAll('.st-used.qty-over').length > 0) {
+      alert('One or more quantities exceed on-hand stock.'); return;
+    }
+
+    const transferItems = [];
+    document.querySelectorAll('.st-used').forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      if (qty > 0) transferItems.push({ recId: inp.dataset.record, qty });
+    });
+    if (transferItems.length === 0) {
+      alert('Enter a quantity for at least one material to transfer.'); return;
+    }
+
+    showPatience('st');
+    const btn = document.getElementById('st-submitBtn');
+    btnLoading(btn);
+
+    const fromRepId = document.getElementById('st-fromRep').value;
+    const toRepId   = document.getElementById('st-toRep').value;
+    const transferDate = document.getElementById('st-date').value;
+    const stKey = crypto.randomUUID();
+    const payload = { fromRepId, toRepId, transferItems, transferDate, stKey };
+
+    try {
+      await submitStockTransfer(payload);
+      showSuccess('st-success', `✔ Stock transfer submitted successfully (${transferItems.length} items). Returning to home screen…`);
+      stFullReset();
+      setTimeout(() => goBack(), 3000);
+
+    } catch(err) {
+      if (isNetworkError(err)) {
+        try {
+          await queueAdd('stockTransfer', payload, `Stock Transfer — ${transferItems.length} item(s)`);
+          updateQueueBadge();
+          requestBackgroundSync();
+          showSuccess('st-success', `📴 No connection — saved offline. ${transferItems.length} item(s) will sync automatically once reception returns.`);
+          stFullReset();
+          setTimeout(() => goBack(), 3000);
+        } catch(queueErr) {
+          alert('Submission failed and could not be saved offline: ' + queueErr.message);
+          console.error(queueErr);
+          btnReset(btn, 'Submit Stock Transfer');
+        }
+      } else {
+        alert('Submission failed: ' + err.message);
+        console.error(err);
+        btnReset(btn, 'Submit Stock Transfer');
+      }
+    }
+  });
+})();
+
+async function loadRepInventory(repRecId, repName, containerId = 'dm-subsections', classPrefix = 'dm', showNote = true) {
+  const container = document.getElementById(containerId);
   container.innerHTML = '<div class="table-loading">⏳ Calculating on-hand inventory for this representative...</div>';
 
   try {
@@ -3136,7 +4067,7 @@ async function loadRepInventory(repRecId, repName) {
       fields: { ...r.fields, '_onhand': onHandMap.hasOwnProperty(r.id) ? onHandMap[r.id] : 0 }
     }));
 
-    buildDMTable('dm-subsections', annotated);
+    buildDMTable(containerId, annotated, classPrefix, showNote);
 
     const withStock = Object.values(onHandMap).filter(v => v > 0).length;
     console.log(`✅ Rep on-hand loaded from SSR: ${ssrRows.length} SSR records, ${withStock} materials with stock`);
@@ -3147,8 +4078,14 @@ async function loadRepInventory(repRecId, repName) {
   }
 }
 
-// Dedicated renderer for Daily Materials Used — receives annotated records directly
-function buildDMTable(containerId, records) {
+// Shared inventory table renderer — Daily Materials Used, ONT Swapout, and
+// Stock Transfer all call this with their own containerId + classPrefix so
+// their qty inputs never collide (a global .dm-used / .so-used / .st-used
+// selector must only ever match its own panel). showNote controls whether
+// the "faulty/broken unit" Note column renders at all — it's meaningful for
+// consumption forms (Daily Materials Used, ONT Swapout) but not for a stock
+// movement like Stock Transfer, so that call passes showNote=false.
+function buildDMTable(containerId, records, classPrefix = 'dm', showNote = true) {
   const container = document.getElementById(containerId);
   container.innerHTML = '';
 
@@ -3194,7 +4131,7 @@ function buildDMTable(containerId, records) {
     tbl.className = 'mat-table';
     tbl.innerHTML = `<thead><tr>
       <th>OP Code</th><th>IT Code</th><th>Description</th>
-      <th>Qty On-Hand</th><th>Qty Used</th><th>Note</th>
+      <th>Qty On-Hand</th><th>Qty Used</th>${showNote ? '<th>Note</th>' : ''}
     </tr></thead>`;
 
     const tbody = document.createElement('tbody');
@@ -3209,19 +4146,19 @@ function buildDMTable(containerId, records) {
         <td class="desc-cell">${f['Description'] || '—'}</td>
         <td class="stock-cell${noStock ? ' low' : ''}" data-onhand="${onhand}">${onhand}</td>
         <td>
-          <input type="number" class="qty-input dm-used"
+          <input type="number" class="qty-input ${classPrefix}-used"
             data-record="${r.id}" data-onhand="${onhand}"
             min="0" value="" placeholder="${noStock ? '—' : '0'}"
             inputmode="numeric" ${noStock ? 'disabled' : ''} />
           <div class="inline-warn">Exceeds on-hand qty</div>
         </td>
-        <td>
-          <select class="dm-note" data-record="${r.id}" style="display:none;">
+        ${showNote ? `<td>
+          <select class="${classPrefix}-note" data-record="${r.id}" style="display:none;">
             <option value="">— Select Note —</option>
             <option value="Material faulty out of box">Material faulty out of box</option>
             <option value="Material broken during install">Material broken during install</option>
           </select>
-        </td>`;
+        </td>` : ''}`;
       tbody.appendChild(tr);
     });
 
@@ -3231,8 +4168,9 @@ function buildDMTable(containerId, records) {
     container.appendChild(sec);
   });
 
-  // Live validation — qty used cannot exceed on-hand
-  document.querySelectorAll('.dm-used:not([disabled])').forEach(inp => {
+  // Live validation — qty used cannot exceed on-hand. Scoped to this container
+  // and this classPrefix so Daily Materials Used and ONT Swapout never cross-wire.
+  container.querySelectorAll(`.${classPrefix}-used:not([disabled])`).forEach(inp => {
     inp.addEventListener('input', () => {
       const onhand = parseInt(inp.dataset.onhand) || 0;
       const val    = parseInt(inp.value) || 0;
@@ -3250,20 +4188,25 @@ function buildDMTable(containerId, records) {
       // Note dropdown — required whenever qty used is more than 1 (e.g. a
       // faulty/broken unit used alongside a good one). Hidden and cleared
       // otherwise, so a stale leftover selection can't submit silently.
-      const noteSel = inp.closest('tr')?.querySelector('.dm-note');
-      if (noteSel) {
-        const noteRequired = val > 1;
-        noteSel.style.display = noteRequired ? '' : 'none';
-        if (!noteRequired) { noteSel.value = ''; noteSel.classList.remove('qty-over'); }
+      // Only applies when this table was built with showNote=true.
+      if (showNote) {
+        const noteSel = inp.closest('tr')?.querySelector(`.${classPrefix}-note`);
+        if (noteSel) {
+          const noteRequired = val > 1;
+          noteSel.style.display = noteRequired ? '' : 'none';
+          if (!noteRequired) { noteSel.value = ''; noteSel.classList.remove('qty-over'); }
+        }
       }
     });
   });
 
-  document.querySelectorAll('.dm-note').forEach(sel => {
-    sel.addEventListener('change', () => {
-      if (sel.value) sel.classList.remove('qty-over');
+  if (showNote) {
+    container.querySelectorAll(`.${classPrefix}-note`).forEach(sel => {
+      sel.addEventListener('change', () => {
+        if (sel.value) sel.classList.remove('qty-over');
+      });
     });
-  });
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -3398,7 +4341,7 @@ function buildOpticommDropdown(sel, selectedState) {
   crNotice.style.display = 'block';
 
   crCompEl.addEventListener('change', function() {
-    buildRepDropdown(crRepEl, this.value, null, null);
+    buildRepDropdown(crRepEl, this.value, null, null, true);
     document.getElementById('cr-subsections').innerHTML = '';
     crNotice.style.display = 'block';
   });
@@ -3546,7 +4489,7 @@ function buildOpticommDropdown(sel, selectedState) {
       this.reset();
       document.getElementById('cr-date').value = todayStr();
       buildCompanyDropdown(crCompEl);
-      buildRepDropdown(crRepEl, '', null, null);
+      buildRepDropdown(crRepEl, '', null, null, true);
       buildStateDropdown(crWhStateEl);
       buildLocationDropdown(crWhLocEl, '');
       document.getElementById('cr-subsections').innerHTML = '';
@@ -4137,20 +5080,33 @@ async function triggerSSReqWebhookBatch(records) {
   }
 }
 
-// ── View control — default is subcontractor (field only)
-// Warehouse group only shown with ?view=WarehouseManagement ───────────────
+// ── View control ────────────────────────────────────────────────────────
+// ?view=WarehouseManagement  → master view, every button visible (unchanged)
+// ?view=BAU                  → Field group, BAU-tagged buttons only
+// (anything else / no param) → Field group, ONT Swapout-tagged buttons only (default)
 (function() {
   const params = new URLSearchParams(window.location.search);
-  const isWarehouse = params.get('view') === 'WarehouseManagement';
+  const view = params.get('view');
   const warehouseGroup = document.getElementById('nav-group-warehouse');
   const fieldGroup     = document.getElementById('nav-group-field');
-  if (!isWarehouse) {
-    // Subcontractor default — hide warehouse buttons, expand field group
-    if (warehouseGroup) warehouseGroup.style.display = 'none';
-    if (fieldGroup) {
-      fieldGroup.style.flex = '1 1 100%';
-      fieldGroup.style.maxWidth = '820px';
-    }
+
+  if (view === 'WarehouseManagement') {
+    // Master view — every button visible, nothing hidden. No per-button
+    // filtering needed here since this view is intentionally everything.
+    return;
+  }
+
+  // Every other case hides the Warehouse group and filters the Field group
+  // down to whichever buttons are tagged for the active view.
+  const activeTag = (view === 'BAU') ? 'bau' : 'ontswapout';
+  if (warehouseGroup) warehouseGroup.style.display = 'none';
+  if (fieldGroup) {
+    fieldGroup.style.flex = '1 1 100%';
+    fieldGroup.style.maxWidth = '820px';
+    fieldGroup.querySelectorAll('.nav-btn[data-views]').forEach(btn => {
+      const tags = btn.dataset.views.split(',');
+      btn.style.display = tags.includes(activeTag) ? '' : 'none';
+    });
   }
 })();
 </script>
