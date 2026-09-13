@@ -2010,6 +2010,7 @@ function goBack() {
 
   document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => { b.style.display=''; b.classList.remove('active'); });
+  applyViewFilter();
 }
 
 // ═══════════════════════════════════════════════════
@@ -5084,15 +5085,16 @@ async function triggerSSReqWebhookBatch(records) {
 // ?view=WarehouseManagement  → master view, every button visible (unchanged)
 // ?view=BAU                  → Field group, BAU-tagged buttons only
 // (anything else / no param) → Field group, ONT Swapout-tagged buttons only (default)
-(function() {
+// Reusable so it can be re-applied after goBack() resets nav button visibility,
+// not just once at page load.
+function applyViewFilter() {
   const params = new URLSearchParams(window.location.search);
   const view = params.get('view');
   const warehouseGroup = document.getElementById('nav-group-warehouse');
   const fieldGroup     = document.getElementById('nav-group-field');
 
   if (view === 'WarehouseManagement') {
-    // Master view — every button visible, nothing hidden. No per-button
-    // filtering needed here since this view is intentionally everything.
+    // Master view — every button visible, nothing hidden.
     return;
   }
 
@@ -5108,7 +5110,8 @@ async function triggerSSReqWebhookBatch(records) {
       btn.style.display = tags.includes(activeTag) ? '' : 'none';
     });
   }
-})();
+}
+applyViewFilter();
 </script>
 </body>
 </html>
