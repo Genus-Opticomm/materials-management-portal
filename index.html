@@ -3721,6 +3721,15 @@ function soFullReset() {
       alert('Please select a Note for any item with a quantity used greater than 1.');
       return;
     }
+    const statusVal = document.getElementById('so-status').value;
+    if (SO_INSTALL_STATUSES.has(statusVal)) {
+      const hasMaterial = Array.from(document.querySelectorAll('.so-used'))
+        .some(inp => (parseInt(inp.value) || 0) > 0);
+      if (!hasMaterial) {
+        alert('This status means stock was used in the field — please enter a quantity for at least one material before submitting.');
+        return;
+      }
+    }
     showPatience('so');
 
     const btn = document.getElementById('so-submitBtn');
@@ -3741,7 +3750,6 @@ function soFullReset() {
     });
     const fullJobCode  = document.getElementById('so-jobcode').value.trim();
     const ontRecId     = document.getElementById('so-ontRecId').value;
-    const statusVal    = document.getElementById('so-status').value;
     const techComments = document.getElementById('so-techComments').value.trim();
     const soDate = document.getElementById('so-date').value;
     const soKey = crypto.randomUUID();
