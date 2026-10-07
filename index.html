@@ -220,6 +220,10 @@
             <label for="inv-date">Date of Materials Receipt <span class="req">*</span></label>
             <input type="date" id="inv-date" required />
           </div>
+          <div class="field-group" id="invgrp-poNumber">
+            <label for="inv-poNumber">PO Number Received <span class="req">*</span></label>
+            <input type="text" id="inv-poNumber" placeholder="If PO not provided, enter N/A" required />
+          </div>
           <div class="field-group full" id="invgrp-docket">
             <label for="inv-docket">Materials match delivery order / docket? <span class="req">*</span></label>
             <select id="inv-docket" required style="max-width:320px;">
@@ -755,10 +759,10 @@ const FLD = {
     'NSW - Queanbeyan':      'fldBiga3PiedzgoNO',
     'NSW - Wagga Wagga':     'fldctJr5UBekK5sE0',
     'QLD - Ferndale':        'fldOPcl3jWQYequUe',
-    'QLD - Maryborough':     'fldTXh9qipbs1qfA7',
+    'QLD - Gulliver':        'fldTXh9qipbs1qfA7',
     'QLD - Ormeau':          'fldRSC8MzV66qVN7y',
-    'QLD - Rockhampton':     'fld0AOBB03m4HM9lR',
-    'QLD - Toowoomba':       'fldZqplztfOb4HvD9',
+    'QLD - Redlynch':        'fld0AOBB03m4HM9lR',
+    'QLD - Sumner':          'fldZqplztfOb4HvD9',
     'QLD - Townsville':      'flduwNhOmFqITcxWP',
     'SA - Melrose Park':     'fldCZrtwUcYpL3m20',
     'TAS - Davenport':       'fldxiFLMGFtmhOkej',
@@ -776,7 +780,8 @@ const FLD = {
   // Inventory Received write fields
   inv_date:     'fldjvfdBaotkgGmE9',
   inv_whState:  'fldUjc7PwKUMxwv3u',
-  inv_whLoc:    'fldogFgq6mj1mSUzu',
+  inv_whLoc:    'fldogFgq6mj1mSUzu',  
+  inv_poNumber: 'fldlerWNVvUz2WivF',
   inv_docket:   'fld5PxbxpaWx8vwpe',
   inv_lineCount:'fldP5Ut8Cx8NPwMy0',
   irl_receipt:  'fldC0bYpvOmq2lI4p',
@@ -1101,19 +1106,21 @@ async function sendSSRBatchToPA(repRecId) {
     const payload = rows.map(row => {
       const f = row.fields;
       return {
-        reportKey:             u(f['fldzxd5Odt0mpzDW8']),
-        fullName:              u(f['fldc33IYWc8kgLdmN']),
-        companyName:           u(f['fld0Cyg9IBXd8XXEH']),
-        inventoryCode:         u(f['fldrbeZkBMPwpaOxg']),
-        opCode:                u(f['fldPpj5hGp4lbQugL']),
-        itCode:                u(f['fldAZUYVyQ5gLWKWk']),
-        description:           u(f['fld5YH3SMorI6dUFe']),
-        totalStockReceived:    Number(f['fldkKoXhDLLQwo8np']) || 0,
-        totalqtyRequested:     Number(f['fld2r0bsneVGQIfnn']) || 0,
-        totalStockUsed:        Number(f['fldmqsBzGd05tJlk8']) || 0,
-        totalStockReturned:    Number(f['fldkeIz1IRPi8tc9j']) || 0,
-        currentStockOnHand:    Number(f['fldpr4nM1K7MkLdEI']) || 0,
-        currentStockRequested: Number(f['fldtl8EaNWqzVVe8O']) || 0,
+        reportKey:                    u(f['fldzxd5Odt0mpzDW8']),
+        fullName:                     u(f['fldc33IYWc8kgLdmN']),
+        companyName:                  u(f['fld0Cyg9IBXd8XXEH']),
+        inventoryCode:                u(f['fldrbeZkBMPwpaOxg']),
+        opCode:                       u(f['fldPpj5hGp4lbQugL']),
+        itCode:                       u(f['fldAZUYVyQ5gLWKWk']),
+        description:                  u(f['fld5YH3SMorI6dUFe']),
+        totalStockReceived:           Number(f['fldkKoXhDLLQwo8np']) || 0,
+        totalqtyRequested:            Number(f['fld2r0bsneVGQIfnn']) || 0,
+        totalStockTransferredOut:     Number(f['fldUwqLqoqQST9ljq']) || 0,
+        totalStockTransferredIn:      Number(f['fldJkSNm8FmvmurzP']) || 0,
+        totalStockUsed:               Number(f['fldmqsBzGd05tJlk8']) || 0,
+        totalStockReturned:           Number(f['fldkeIz1IRPi8tc9j']) || 0,
+        currentStockOnHand:           Number(f['fldpr4nM1K7MkLdEI']) || 0,
+        currentStockRequested:        Number(f['fldtl8EaNWqzVVe8O']) || 0,
       };
     });
 
@@ -2052,6 +2059,7 @@ function goBack() {
     let ok = true;
     if (!validateSel('inv-state',   'invgrp-state'))    ok = false;
     if (!validateSel('inv-location','invgrp-location'))  ok = false;
+    if (!validateTxt('inv-poNumber','invgrp-poNumber'))  ok = false;
     if (!validateSel('inv-docket',  'invgrp-docket'))    ok = false;
     if (!validateTxt('inv-date',    'invgrp-date'))      ok = false;
     if (!ok) { alert('Please complete all required fields.'); return; }
@@ -2091,6 +2099,7 @@ function goBack() {
           [FLD.inv_date]:      document.getElementById('inv-date').value,
           [FLD.inv_whState]:   [locRecId],
           [FLD.inv_whLoc]:     [locRecId],
+          [FLD.inv_poNumber]:  document.getElementById('inv-poNumber').value.trim(),
           [FLD.inv_docket]:    document.getElementById('inv-docket').value,
           [FLD.inv_lineCount]: lineItems.length,
           [FLD.inv_manager]:   [locRecId],
