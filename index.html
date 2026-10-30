@@ -179,7 +179,7 @@
         <div class="nav-group-label">Field</div>
         <div class="nav-buttons nav-row-main">
           <button class="nav-btn" data-target="panel-workforce" data-views="bau,ontswapout">Field Workforce Materials Request</button>
-          <button class="nav-btn" data-target="panel-daily" data-views="bau">Daily Materials Used</button>
+          <button class="nav-btn" data-target="panel-daily" data-views="bau,ontswapout">Service Activations &amp; Faults</button>
           <button class="nav-btn" data-target="panel-ont-swapout" data-views="ontswapout">ONT Swapout</button>
           <button class="nav-btn" data-target="panel-stock-transfer" data-views="bau,ontswapout">Stock Transfer</button>
         </div>
@@ -315,9 +315,9 @@
     </div>
   </div>
 
-  <!-- ══ DAILY MATERIALS USED ══ -->
+  <!-- ══ Service Activations & Faults ══ -->
   <div class="form-panel" id="panel-daily">
-    <div class="panel-title">Daily Materials Used</div>
+    <div class="panel-title">Service Activations &amp; Faults</div>
     <div class="panel-subtitle">Record materials installed on site today.</div>
     <div class="form-wrapper">
       <div class="success-banner" id="dm-success"></div>
@@ -359,7 +359,7 @@
         <div class="form-footer">
           <button type="button" class="btn btn-back" onclick="goBack()">← Back</button>
           <div id="dm-patience" class="patience-notice"><span class="pn-icon">⚠️</span><div class="pn-text"><strong>Submitting your data...</strong><span>Please keep this page open and do not refresh, close, or navigate away until you see the confirmation message.</span></div></div>
-          <button type="submit" class="btn btn-submit" id="dm-submitBtn">Submit Daily Record</button>
+          <button type="submit" class="btn btn-submit" id="dm-submitBtn">Submit Job</button>
         </div>
       </form>
     </div>
@@ -1969,7 +1969,7 @@ function goBack() {
     setQtyMode('request');
   } catch(e) {}
 
-  // Reset Daily Materials Used
+  // Reset Service Activations & Faults
   try {
     document.getElementById('formDaily').reset();
     document.getElementById('dm-date').value = todayStr();
@@ -1979,7 +1979,7 @@ function goBack() {
     buildRepDropdown(document.getElementById('dm-rep'), '', document.getElementById('dm-email'), document.getElementById('dm-mobile'));
     document.getElementById('dm-subsections').innerHTML = '';
     document.getElementById('dm-notice').style.display = 'block';
-    hidePatience('dm', 'Submit Daily Record');
+    hidePatience('dm', 'Submit Job');
   } catch(e) {}
 
   // Reset ONT Swapout
@@ -2956,9 +2956,9 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
   });
 })();
 
-// ── Daily Materials Used form listeners ────────────
+// ── Service Activations & Faults form listeners ────────────
 // ═══════════════════════════════════════════════════
-//  DAILY MATERIALS USED
+//  Service Activations & Faults
 // ═══════════════════════════════════════════════════
 (function() {
   const compEl   = document.getElementById('dm-company');
@@ -2992,7 +2992,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
   async function submitDailyMaterialUsed(payload) {
     const { repRecId, usedItems, fullJobCode, dmDate, dmKey } = payload;
 
-    // 1. Create the main Daily Materials Used record (idempotent)
+    // 1. Create the main Service Activations & Faults record (idempotent)
     let mainUsedId;
     let existingMulLineIds = [];
     const dmExisting = await atFetchAll(TBL.materialsUsed, {
@@ -3169,6 +3169,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
         description:   mat?.fields?.['Description'] || '',
         qtyUsed:       item.qty || 0,
         note:          item.note || '',
+        program:       'BAU',
       };
     });
 
@@ -3184,9 +3185,9 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
         const sjrOk = await sendSJRBatchToPA(sjrExcelPayload);
         if (!ssrOk || !sjrOk) throw new Error('Excel sync returned a failure status');
       } catch (webhookErr) {
-        console.warn('Excel sync failed after Daily Material Used submission — queuing for retry:', webhookErr.message);
+        console.warn('Excel sync failed after Service Activations &amp; Faults submission — queuing for retry:', webhookErr.message);
         try {
-          await queueAdd('dailyMaterialUsedWebhookRetry', { repRecId, sjrExcelPayload }, `Daily Material Used — Excel sync retry (${fullJobCode})`);
+          await queueAdd('dailyMaterialUsedWebhookRetry', { repRecId, sjrExcelPayload }, `Service Activations &amp; Faults — Excel sync retry (${fullJobCode})`);
           updateQueueBadge();
           requestBackgroundSync();
         } catch (qErr) {
@@ -3256,7 +3257,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
 
     try {
       await submitDailyMaterialUsed(payload);
-      showSuccess('dm-success', `✔ Daily record submitted successfully (${usedItems.length} items). Returning to home screen…`);
+      showSuccess('dm-success', `✔ Job submitted successfully (${usedItems.length} items). Returning to home screen…`);
 
       // Reset form
       this.reset();
@@ -3272,7 +3273,7 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
     } catch(err) {
       if (isNetworkError(err)) {
         try {
-          await queueAdd('dailyMaterialUsed', payload, `Daily Material Used — ${usedItems.length} item(s) — ${fullJobCode}`);
+          await queueAdd('dailyMaterialUsed', payload, `Service Activations &amp; Faults — ${usedItems.length} item(s) — ${fullJobCode}`);
           updateQueueBadge();
           requestBackgroundSync();
           showSuccess('dm-success', `📴 No connection — saved offline. ${usedItems.length} item(s) will sync automatically once reception returns.`);
@@ -3288,12 +3289,12 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
         } catch(queueErr) {
           alert('Submission failed and could not be saved offline: ' + queueErr.message);
           console.error(queueErr);
-          btnReset(btn, 'Submit Daily Record');
+          btnReset(btn, 'Submit Job');
         }
       } else {
         alert('Submission failed: ' + err.message);
         console.error(err);
-        btnReset(btn, 'Submit Daily Record');
+        btnReset(btn, 'Submit Job');
       }
     }
 });
@@ -3566,7 +3567,7 @@ function soFullReset() {
     }
 
     // 3+4. Fetch SSR once, group MUL lines by SSR row, then update/create SSR + SJR all in parallel
-    // — identical logic to Daily Materials Used, since both programs share the
+    // — identical logic to Service Activations & Faults, since both programs share the
     // same rep on-hand stock pool via the same Materials Used Lines table.
     const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
       fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
@@ -4100,12 +4101,12 @@ async function loadRepInventory(repRecId, repName, containerId = 'dm-subsections
   }
 }
 
-// Shared inventory table renderer — Daily Materials Used, ONT Swapout, and
+// Shared inventory table renderer — Service Activations & Faults, ONT Swapout, and
 // Stock Transfer all call this with their own containerId + classPrefix so
 // their qty inputs never collide (a global .dm-used / .so-used / .st-used
 // selector must only ever match its own panel). showNote controls whether
 // the "faulty/broken unit" Note column renders at all — it's meaningful for
-// consumption forms (Daily Materials Used, ONT Swapout) but not for a stock
+// consumption forms (Service Activations & Faults, ONT Swapout) but not for a stock
 // movement like Stock Transfer, so that call passes showNote=false.
 function buildDMTable(containerId, records, classPrefix = 'dm', showNote = true) {
   const container = document.getElementById(containerId);
@@ -4191,7 +4192,7 @@ function buildDMTable(containerId, records, classPrefix = 'dm', showNote = true)
   });
 
   // Live validation — qty used cannot exceed on-hand. Scoped to this container
-  // and this classPrefix so Daily Materials Used and ONT Swapout never cross-wire.
+  // and this classPrefix so Service Activations & Faults and ONT Swapout never cross-wire.
   container.querySelectorAll(`.${classPrefix}-used:not([disabled])`).forEach(inp => {
     inp.addEventListener('input', () => {
       const onhand = parseInt(inp.dataset.onhand) || 0;
