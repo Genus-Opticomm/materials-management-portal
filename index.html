@@ -146,6 +146,61 @@
   #offline-queue-badge.oq-offline .oq-dot { background:#ff5c5c; }
   @media(max-width:600px){ #offline-queue-badge { top:auto; bottom:14px; right:14px; left:14px; justify-content:center; } }
 
+/* ═══ MOBILE / TABLET LAYOUT ═══ */
+
+/* Tablet and below: stop the stacked boxes eating width */
+@media (max-width: 1024px) {
+  .container { padding: 1rem; }
+  .form-wrapper { padding: .75rem; }
+}
+
+/* Phone */
+@media (max-width: 700px) {
+  body { background: #fff; }
+  header { height: 110px; padding: 0 1rem; }
+  .header-logo { height: 80px; max-width: 100%; }
+  .container { margin: -16px 0 0; padding: .75rem .6rem 1.5rem; border-radius: 1rem 1rem 0 0; box-shadow: none; }
+  .form-wrapper { border: none; padding: 0; overflow-x: visible; }
+  .panel-title { font-size: 1.25rem; }
+  .panel-subtitle { margin-bottom: 1rem; }
+
+  /* Navigation buttons: full width, easy to tap */
+  .nav-groups { gap: .75rem; }
+  .nav-group { flex: 1 1 100%; max-width: none; }
+  .nav-btn { flex: 1 1 100%; min-height: 48px; font-size: 1rem; }
+
+  /* Inputs: 16px stops iOS zooming on focus, 48px is a comfortable tap size */
+  input[type="text"], input[type="date"], input[type="number"], select, textarea { font-size: 16px; min-height: 48px; }
+  input[type="date"] { display: block; }
+  .field-grid { grid-template-columns: 1fr; gap: 1rem; }
+  #wfgrp-dateColl { grid-column: 1 / -1 !important; }
+  #wfgrp-dateColl div { grid-template-columns: 1fr !important; }
+  .search-row { flex-direction: column; }
+  .search-btn { width: 100%; min-height: 48px; }
+
+  /* Materials tables become one card per item */
+  .subsection-header { padding: 1rem; }
+  .subsection-body { overflow-x: visible !important; }
+  .mat-table, .mat-table tbody { display: block; width: 100%; }
+  .mat-table thead { display: none; }
+  .mat-table tr { display: flex; flex-direction: column; gap: .15rem; padding: .85rem 1rem; border-bottom: 1px solid var(--dark-10); }
+  .mat-table tr:hover td { background: transparent; }
+  .mat-table td { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem .75rem; padding: .2rem 0; border: 0; text-align: right; }
+  .mat-table td::before { content: attr(data-label); font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--primary-mid); text-align: left; }
+  .mat-table td.desc-cell { order: -1; display: block; text-align: left; font-size: .95rem; font-weight: 600; color: var(--primary-dark); padding-bottom: .35rem; }
+  .mat-table td.desc-cell::before { content: none; }
+  .mat-table td .inline-warn { flex-basis: 100%; text-align: right; }
+  .qty-input { width: 110px !important; min-height: 44px; font-size: 16px !important; padding: .5rem !important; }
+  /* Hide the locked Qty Received cell on a new request, and the Note cell until it's needed */
+  .mat-table td:has(.wf-rcv:disabled) { display: none; }
+  .mat-table td:has(select[style*="display: none"]),
+  .mat-table td:has(select[style*="display:none"]) { display: none; }
+
+  /* Footer: Submit on top, Back underneath */
+  .form-footer { flex-direction: column-reverse; align-items: stretch; margin-top: 1.25rem; }
+  .btn { width: 100%; min-height: 48px; }
+}
+
 </style>
   <link rel="icon" href="favicon.png" type="image/png">
   <link rel="manifest" href="manifest.json?v=2">
@@ -5134,6 +5189,28 @@ function applyViewFilter() {
   }
 }
 applyViewFilter();
+
+// ── Mobile table labels ──────────────────────────────────────────────
+// Copies each column heading onto its cells (data-label) so the phone CSS
+// can show every row as a labelled card.
+(function () {
+  let queued = false;
+  function labelCells() {
+    queued = false;
+    document.querySelectorAll('table.mat-table').forEach(tbl => {
+      const heads = Array.from(tbl.querySelectorAll('thead th')).map(th => th.textContent.trim());
+      tbl.querySelectorAll('tbody tr').forEach(tr => {
+        Array.from(tr.children).forEach((td, i) => {
+          if (heads[i] && td.dataset.label !== heads[i]) td.dataset.label = heads[i];
+        });
+      });
+    });
+  }
+  new MutationObserver(() => {
+    if (!queued) { queued = true; requestAnimationFrame(labelCells); }
+  }).observe(document.querySelector('main'), { childList: true, subtree: true });
+})();
+
 </script>
 </body>
 </html>
