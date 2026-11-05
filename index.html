@@ -884,12 +884,46 @@ window.fetch = async function portalFetch(input, init = {}) {
 
   if (method === 'GET' || parts[1] === 'listRecords') {
     const payload = { table };
-    const filterByFormula = requestBody.filterByFormula || parsed.searchParams.get('filterByFormula');
-    const offset = requestBody.offset || parsed.searchParams.get('offset');
-    if (filterByFormula) payload.filterByFormula = filterByFormula;
-    if (offset) payload.offset = offset;
-    return callPowerAutomate(PA_READ_URL, payload, 'Read');
-  }
+
+    const filterByFormula =
+        requestBody.filterByFormula ||
+        parsed.searchParams.get('filterByFormula');
+
+    const offset =
+        requestBody.offset ||
+        parsed.searchParams.get('offset');
+
+    const fields =
+        Array.isArray(requestBody.fields)
+            ? requestBody.fields
+            : parsed.searchParams.getAll('fields[]');
+
+    const returnFieldsByFieldId =
+        requestBody.returnFieldsByFieldId === true ||
+        parsed.searchParams.get('returnFieldsByFieldId') === 'true';
+
+    if (filterByFormula) {
+        payload.filterByFormula = filterByFormula;
+    }
+
+    if (offset) {
+        payload.offset = offset;
+    }
+
+    if (fields && fields.length > 0) {
+        payload.fields = fields;
+    }
+
+    if (returnFieldsByFieldId) {
+        payload.returnFieldsByFieldId = true;
+    }
+
+    return callPowerAutomate(
+        PA_READ_URL,
+        payload,
+        'Read'
+    );
+}
 
   if (method === 'POST') {
     if (Array.isArray(requestBody.records)) {
