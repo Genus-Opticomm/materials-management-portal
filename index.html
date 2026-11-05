@@ -1077,7 +1077,10 @@ let CACHE = { warehouses: null, subcontractors: null, representatives: null, mat
 async function atFetchAll(tableId, params = {}) {
   let records = [], offset = null;
   do {
-    const url = new URL(`${AT_API}/${AT_BASE}/${tableId}`);
+    const url = new URL(
+  `${AT_API}/${AT_BASE}/${tableId}`,
+  window.location.origin
+);
     const parts = [];
 
     // Add view if provided
