@@ -3273,9 +3273,10 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
 
     // 3+4. Fetch SSR once, group MUL lines by SSR row, then update/create SSR + SJR all in parallel
     const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
-      fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
-      returnFieldsByFieldId: true,
-    });
+        filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`,
+        fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
+        returnFieldsByFieldId: true,
+      });
 
     // Group MUL lines by SSR row — one atUpdate per SSR row, not per MUL line
     const ssrUpdates = {};   // ssrId → { existingIds[], newLineIds[] }
@@ -3328,12 +3329,16 @@ function wfUnlockFields() { WF_LOCK.forEach(id => { const el=document.getElement
         }).catch(err => console.warn('SSR create failed:', err.message))
       ));
     }
-    // SJR creates — skip any MUL lines that already have an SJR record (retry-safety,
-    // matters when a prior attempt got this far before losing reception), chunked in groups of 4.
-    const existingSjrRows = await atListRecords(TBL.subcontractorJobReport, {
-      fields: ['fldkCo5VFj09XALYv'], // Materials Used Line
-      returnFieldsByFieldId: true,
-    }).catch(() => []);
+
+      // Only a retry can already have SJR rows for these lines, so skip the read on a first attempt.
+      let existingSjrRows = [];
+      if (existingMulLineIds.length > 0) {
+        existingSjrRows = await atListRecords(TBL.subcontractorJobReport, {
+          filterByFormula: `FIND("${fullJobCode}", ARRAYJOIN({Job Code}))`,
+          fields: ['fldkCo5VFj09XALYv'], // Materials Used Line
+          returnFieldsByFieldId: true,
+        }).catch(() => []);
+      }
     const mulIdsWithSjr = new Set();
     existingSjrRows.forEach(row => {
       (row.fields['fldkCo5VFj09XALYv'] || []).forEach(r => mulIdsWithSjr.add(r && r.id ? r.id : r));
@@ -3781,7 +3786,9 @@ function soFullReset() {
     // 3+4. Fetch SSR once, group MUL lines by SSR row, then update/create SSR + SJR all in parallel
     // — identical logic to Service Activations & Faults, since both programs share the
     // same rep on-hand stock pool via the same Materials Used Lines table.
-    const allSsrRows = await atListRecords(TBL.subcontractorStockReport, {
+    // No materials used (e.g. a no-access visit): there are no lines to link, so skip the SSR read.
+    const allSsrRows = createdUsedLineIds.length === 0 ? [] : await atListRecords(TBL.subcontractorStockReport, {
+      filterByFormula: `FIND("${repRecId}", ARRAYJOIN({Rep Record ID (from Representative)}))`,
       fields: ['fldTqTbr6ysQAimLX', 'fldXm5gW03QOzBE1P', 'fldozoAjUrm312vj9'],
       returnFieldsByFieldId: true,
     });
@@ -3834,10 +3841,15 @@ function soFullReset() {
       ));
     }
 
-    const existingSjrRows = await atListRecords(TBL.subcontractorJobReport, {
-      fields: ['fldkCo5VFj09XALYv'], // Materials Used Line
-      returnFieldsByFieldId: true,
-    }).catch(() => []);
+      // Only a retry can already have SJR rows for these lines, so skip the read on a first attempt.
+      let existingSjrRows = [];
+      if (existingMulLineIds.length > 0) {
+        existingSjrRows = await atListRecords(TBL.subcontractorJobReport, {
+          filterByFormula: `FIND("${fullJobCode}", ARRAYJOIN({Job Code}))`,
+          fields: ['fldkCo5VFj09XALYv'], // Materials Used Line
+          returnFieldsByFieldId: true,
+        }).catch(() => []);
+      }
     const mulIdsWithSjr = new Set();
     existingSjrRows.forEach(row => {
       (row.fields['fldkCo5VFj09XALYv'] || []).forEach(r => mulIdsWithSjr.add(r && r.id ? r.id : r));
